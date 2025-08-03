@@ -35,13 +35,16 @@
 
         ws.onopen = function() {
             term.writeln('--- WebSocket Connection Established ---');
-            // Kirim ukuran awal terminal
             ws.send(JSON.stringify({ type: 'resize', data: { cols: term.cols, rows: term.rows } }));
         };
 
-        ws.onmessage = function(event) {
-            // Data dari PTY backend langsung ditulis ke terminal
-            term.write(event.data);
+        ws.onmessage = async function(event) {
+            if (event.data instanceof Blob) {
+                const data = new Uint8Array(await event.data.arrayBuffer());
+                term.write(data);
+            } else {
+                term.write(event.data);
+            }
         };
 
         ws.onerror = function(event) {
@@ -53,9 +56,10 @@
             term.writeln('\r\n--- WebSocket Connection Closed ---');
         };
 
-        // Kirim data dari terminal ke backend
         term.onData(data => {
-            ws.send(JSON.stringify({ type: 'stdin', data: data }));
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: 'stdin', data: data }));
+            }
         });
 
         // Handle resize
