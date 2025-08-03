@@ -1,5 +1,10 @@
 import lxc
-
+import os
+import pty
+import select
+import uuid
+from threading import Thread
+import asyncio
 import json
 import redis as sync_redis
 import psutil  
@@ -108,3 +113,56 @@ def container_action_task(name, action):
     except Exception as e:
         publish_status(c.state, c.get_ips(family="inet")) 
         print(f"Error during action '{action}' on '{name}': {e}")
+
+@celery_app.task
+def console_session_task(session_id, container_name):
+    raw_redis_client = sync_redis.from_url(REDIS_URL)
+    
+    input_channel = f"console_input:{session_id}"
+    output_channel = f"console_output:{session_id}"
+    
+    pid, fd = pty.fork()
+    
+    if pid == 0: # Proses anak
+        try:
+            os.execvp("lxc-attach", ["lxc-attach", "-n", container_name])
+        except Exception as e:
+            print(f"Error executing lxc-attach: {e}")
+            os._exit(1)
+    else: # Proses induk
+        def pty_to_redis():
+            try:
+                while True:
+                    r, _, _ = select.select([fd], [], [], 1.0)
+                    if r:
+                        data = os.read(fd, 1024)
+                        if not data: break
+                        raw_redis_client.publish(output_channel, data)
+            finally:
+                raw_redis_client.publish(output_channel, b'\r\n--- Console session ended ---\r\n')
+
+        def redis_to_pty():
+            pubsub = raw_redis_client.pubsub()
+            pubsub.subscribe(input_channel)
+            for message in pubsub.listen():
+                if message['type'] == 'message':
+                    data = message['data']
+                    if data == b'__TERMINATE__': break
+                    try:
+                        os.write(fd, data)
+                    except OSError:
+                        break
+
+        output_thread = Thread(target=pty_to_redis, daemon=True)
+        input_thread = Thread(target=redis_to_pty, daemon=True)
+        output_thread.start()
+        input_thread.start()
+        
+        try:
+            os.waitpid(pid, 0)
+        finally:
+            raw_redis_client.publish(input_channel, b'__TERMINATE__')
+            output_thread.join(timeout=1)
+            input_thread.join(timeout=1)
+            os.close(fd)
+            raw_redis_client.close()

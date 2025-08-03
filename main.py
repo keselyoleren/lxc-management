@@ -1,6 +1,7 @@
 import lxc
 import redis.asyncio as redis
-
+import uuid
+import os
 import asyncio
 import json
 
@@ -10,12 +11,13 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 
 
-from worker import container_action_task, create_lxc_container_task, get_host_stats_task, get_lxc_containers_info_task # Import library baru
+from worker import console_session_task, container_action_task, create_lxc_container_task, get_host_stats_task, get_lxc_containers_info_task # Import library baru
 from settings import REDIS_URL, PUBSUB_CHANNEL
 
 app = FastAPI(title="LXC Manager")
 templates = Jinja2Templates(directory="templates")
 redis_client = redis.from_url(REDIS_URL, decode_responses=True)
+
 
 
 @app.get("/")
@@ -41,6 +43,11 @@ async def create_container_endpoint(
 async def container_action_endpoint(name: str, action: str):
     container_action_task.delay(name, action)
     return RedirectResponse(url="/", status_code=303, headers={"Cache-Control": "no-store"})
+
+@app.get("/container/{container_name}/console")
+async def console_page(request: Request, container_name: str):
+    return templates.TemplateResponse("console.html", {"request": request, "container_name": container_name})
+
 
 async def redis_listener(websocket: WebSocket, stop_event: asyncio.Event):
     pubsub = redis_client.pubsub()
@@ -82,3 +89,43 @@ async def websocket_endpoint(websocket: WebSocket):
     finally:
         stop_event.set()
         await asyncio.gather(listener_task, sender_task, return_exceptions=True)
+
+@app.websocket("/ws/console/{container_name}")
+async def console_websocket(websocket: WebSocket, container_name: str):
+    await websocket.accept()
+    session_id = str(uuid.uuid4())
+    input_channel = f"console_input:{session_id}"
+    output_channel = f"console_output:{session_id}"
+    
+    console_session_task.delay(session_id, container_name)
+    stop_event = asyncio.Event()
+    
+    async def forward_to_redis(ws: WebSocket):
+        try:
+            while not stop_event.is_set():
+                ws_data = await ws.receive_text()
+                msg = json.loads(ws_data)
+                if msg.get('type') == 'stdin':
+                    await redis_client.publish(input_channel, msg['data'].encode('utf-8'))
+        except (WebSocketDisconnect, json.JSONDecodeError): pass
+        finally: stop_event.set(); await redis_client.publish(input_channel, b'__TERMINATE__')
+
+    async def listen_from_redis(ws: WebSocket):
+        # Gunakan client redis terpisah untuk data byte mentah
+        raw_redis_client = redis.from_url(REDIS_URL)
+        pubsub = raw_redis_client.pubsub()
+        await pubsub.subscribe(output_channel)
+        try:
+            while not stop_event.is_set():
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if message: await ws.send_bytes(message['data'])
+                await asyncio.sleep(0.01)
+        finally: await pubsub.unsubscribe(output_channel); await raw_redis_client.close()
+
+    listener_task = asyncio.create_task(listen_from_redis(websocket))
+    forwarder_task = asyncio.create_task(forward_to_redis(websocket))
+    
+    try:
+        await asyncio.gather(listener_task, forwarder_task)
+    except Exception as e: print(f"Console websocket error: {e}")
+    finally: stop_event.set(); print(f"Console session for {container_name} closed.")
