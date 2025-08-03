@@ -41,7 +41,7 @@ This project is designed to help manage Linux containers (LXC) programmatically.
 1. **Clone the repository:**
    ```sh
    git clone <your-repo-url>
-   cd lxc-learn
+   cd lxc-management
    ```
 2. **Build and start the services:**
    ```sh
