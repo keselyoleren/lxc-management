@@ -15,7 +15,7 @@ from threading import Thread
 import uuid
 
 # --- Konfigurasi & Inisialisasi ---
-REDIS_URL = "redis://redis:6379/0"
+REDIS_URL = "redis://localhost:6379/0"
 PUBSUB_CHANNEL = "lxc_global_events"
 app = FastAPI(title="LXC Manager")
 templates = Jinja2Templates(directory="templates")
@@ -119,7 +119,6 @@ def get_container_stats_task(name: str):
     try:
         c = lxc.Container(name)
         if not c.running:
-            # FIX: Kembalikan struktur data yang konsisten meskipun container berhenti
             return {"cpu_ns": 0, "ram_usage": 0, "ram_limit": 0}
         
         cpu_usage_ns = int(c.get_cgroup_item("cpu.stat").splitlines()[1].split()[1])
@@ -128,7 +127,6 @@ def get_container_stats_task(name: str):
         ram_limit_bytes = int(ram_limit_bytes_str) if ram_limit_bytes_str.isdigit() else 0
         return {"cpu_ns": cpu_usage_ns, "ram_usage": ram_usage_bytes, "ram_limit": ram_limit_bytes}
     except (FileNotFoundError, IndexError):
-        # FIX: Kembalikan struktur data yang konsisten saat terjadi error
         return {"cpu_ns": 0, "ram_usage": 0, "ram_limit": 0}
     except Exception as e:
         print(f"Error getting stats for {name}: {e}")
@@ -163,7 +161,6 @@ def console_session_task(session_id, container_name):
             for msg in pubsub.listen():
                 if msg['data'] == b'__TERMINATE__': break
                 try:
-                    # FIX: Tulis data sebagai bytes, karena PTY mengharapkannya
                     os.write(fd, msg['data'])
                 except OSError: break
         
@@ -266,12 +263,10 @@ async def ws_container_stats(websocket: WebSocket, name: str):
             task = get_container_stats_task.delay(name)
             stats = task.get(timeout=5)
             
-            # FIX: Pastikan stats tidak None sebelum diproses
             if stats:
                 current_time = asyncio.get_event_loop().time()
                 time_delta = current_time - last_time
                 
-                # FIX: Gunakan .get() untuk menghindari KeyError
                 cpu_delta_ns = stats.get('cpu_ns', 0) - last_cpu_ns
                 cpu_percent = (cpu_delta_ns / 1_000_000_000) / time_delta * 100 if time_delta > 0 else 0
                 
@@ -279,6 +274,10 @@ async def ws_container_stats(websocket: WebSocket, name: str):
                 last_time = current_time
                 
                 await websocket.send_json({"cpu": min(max(cpu_percent, 0), 100), "ram": stats.get('ram_usage', 0), "ram_limit": stats.get('ram_limit', 0)})
+            else:
+                # FIX: Kirim data nol jika stats tidak tersedia (misal, container berhenti)
+                await websocket.send_json({"cpu": 0, "ram": 0, "ram_limit": 0})
+
             await asyncio.sleep(2)
     except WebSocketDisconnect:
         print(f"Stats client for {name} disconnected.")
@@ -296,13 +295,17 @@ async def ws_console(websocket: WebSocket, container_name: str):
     stop_event = asyncio.Event()
     
     async def forward_to_redis(ws: WebSocket):
+        # FIX: Buat koneksi redis baru yang tidak men-decode respons (untuk data biner)
+        raw_redis_publisher = redis.from_url(REDIS_URL)
         try:
             while not stop_event.is_set():
-                # FIX: Terima data sebagai bytes, karena itu yang dikirim oleh onData setelah dienkode
                 data = await ws.receive_bytes()
-                await redis_client.publish(input_ch, data)
+                await raw_redis_publisher.publish(input_ch, data)
         except WebSocketDisconnect: pass
-        finally: stop_event.set(); await redis_client.publish(input_ch, b'__TERMINATE__')
+        finally:
+            stop_event.set()
+            await raw_redis_publisher.publish(input_ch, b'__TERMINATE__')
+            await raw_redis_publisher.close()
 
     async def listen_from_redis(ws: WebSocket):
         raw_redis_client = redis.from_url(REDIS_URL)
@@ -313,11 +316,15 @@ async def ws_console(websocket: WebSocket, container_name: str):
                 msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if msg: await ws.send_bytes(msg['data'])
                 await asyncio.sleep(0.01)
-        finally: await pubsub.unsubscribe(output_ch); await raw_redis_client.close()
+        finally:
+            await pubsub.unsubscribe(output_ch)
+            await raw_redis_client.close()
 
     listener_task = asyncio.create_task(listen_from_redis(websocket))
     forwarder_task = asyncio.create_task(forward_to_redis(websocket))
     
     try: await asyncio.gather(listener_task, forwarder_task)
     except Exception: pass
-    finally: stop_event.set(); print(f"Console session for {container_name} closed.")
+    finally:
+        stop_event.set()
+        print(f"Console session for {container_name} closed.")
