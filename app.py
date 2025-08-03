@@ -5,6 +5,7 @@ from celery.result import AsyncResult
 from fastapi import FastAPI, Request, Form, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.templating import Jinja2Templates
+import redis as sync_redis
 import asyncio
 import json
 import psutil
@@ -15,8 +16,9 @@ from threading import Thread
 import uuid
 
 # --- Konfigurasi & Inisialisasi ---
-REDIS_URL = "redis://redis:6379/0"
+REDIS_URL = "redis://localhost:6379/0"
 PUBSUB_CHANNEL = "lxc_global_events"
+
 app = FastAPI(title="LXC Manager")
 templates = Jinja2Templates(directory="templates")
 celery_app = Celery('tasks', broker=REDIS_URL, backend=REDIS_URL, include=['main'])
@@ -81,7 +83,6 @@ def create_lxc_container_task(name, template, ram_limit, cpu_limit):
 @celery_app.task
 def container_action_task(name, action):
     """Menjalankan aksi (start, stop, destroy) pada container."""
-    import redis as sync_redis
     sync_redis_client = sync_redis.from_url(REDIS_URL, decode_responses=True)
     
     def publish_global_event(event_type, data):
@@ -133,16 +134,20 @@ def get_container_stats_task(name: str):
 
 @celery_app.task
 def console_session_task(session_id, container_name):
-    """Menjalankan sesi PTY lxc-attach."""
-    import redis as sync_redis
     raw_redis_client = sync_redis.from_url(REDIS_URL)
-    input_ch, output_ch = f"console_in:{session_id}", f"console_out:{session_id}"
+    
+    input_channel = f"console_input:{session_id}"
+    output_channel = f"console_output:{session_id}"
     
     pid, fd = pty.fork()
-    if pid == 0:
-        try: os.execvp("lxc-attach", ["lxc-attach", "-n", container_name])
-        except Exception: os._exit(1)
-    else:
+    
+    if pid == 0: 
+        try:
+            os.execvp("lxc-attach", ["lxc-attach", "-n", container_name])
+        except Exception as e:
+            print(f"Error executing lxc-attach: {e}")
+            os._exit(1)
+    else: 
         def pty_to_redis():
             try:
                 while True:
@@ -150,27 +155,36 @@ def console_session_task(session_id, container_name):
                     if r:
                         data = os.read(fd, 1024)
                         if not data: break
-                        raw_redis_client.publish(output_ch, data)
+                        raw_redis_client.publish(output_channel, data)
             finally:
-                raw_redis_client.publish(output_ch, b'\r\n--- Console session ended ---\r\n')
-        
+                raw_redis_client.publish(output_channel, b'\r\n--- Console session ended ---\r\n')
+
         def redis_to_pty():
             pubsub = raw_redis_client.pubsub()
-            pubsub.subscribe(input_ch)
-            for msg in pubsub.listen():
-                if msg['type'] == 'message':
-                    if msg['data'] == b'__TERMINATE__': break
-                    try: os.write(fd, msg['data'])
-                    except OSError: break
+            pubsub.subscribe(input_channel)
+            for message in pubsub.listen():
+                if message['type'] == 'message':
+                    data = message['data']
+                    if data == b'__TERMINATE__': break
+                    try:
+                        os.write(fd, data)
+                    except OSError:
+                        break
+
+        output_thread = Thread(target=pty_to_redis, daemon=True)
+        input_thread = Thread(target=redis_to_pty, daemon=True)
+        output_thread.start()
+        input_thread.start()
         
-        out_thread = Thread(target=pty_to_redis, daemon=True)
-        in_thread = Thread(target=redis_to_pty, daemon=True)
-        out_thread.start()
-        in_thread.start()
-        try: os.waitpid(pid, 0)
+        try:
+            os.waitpid(pid, 0)
         finally:
-            raw_redis_client.publish(input_ch, b'__TERMINATE__')
-            out_thread.join(1); in_thread.join(1); os.close(fd); raw_redis_client.close()
+            raw_redis_client.publish(input_channel, b'__TERMINATE__')
+            output_thread.join(timeout=1)
+            input_thread.join(timeout=1)
+            os.close(fd)
+            raw_redis_client.close()
+
 
 # --- FastAPI Endpoints ---
 
@@ -278,11 +292,11 @@ async def ws_container_stats(websocket: WebSocket, name: str):
         print(f"Error in stats websocket for {name}: {e}")
 
 @app.websocket("/ws/console/{container_name}")
-async def ws_console(websocket: WebSocket, container_name: str):
-    """WebSocket untuk sesi terminal interaktif."""
+async def console_websocket(websocket: WebSocket, container_name: str):
     await websocket.accept()
     session_id = str(uuid.uuid4())
-    input_ch, output_ch = f"console_in:{session_id}", f"console_out:{session_id}"
+    input_channel = f"console_input:{session_id}"
+    output_channel = f"console_output:{session_id}"
     
     console_session_task.delay(session_id, container_name)
     stop_event = asyncio.Event()
@@ -290,25 +304,29 @@ async def ws_console(websocket: WebSocket, container_name: str):
     async def forward_to_redis(ws: WebSocket):
         try:
             while not stop_event.is_set():
-                data = await ws.receive_bytes()
-                await redis_client.publish(input_ch, data)
-        except WebSocketDisconnect: pass
-        finally: stop_event.set(); await redis_client.publish(input_ch, b'__TERMINATE__')
+                ws_data = await ws.receive_text()
+                msg = json.loads(ws_data)
+                if msg.get('type') == 'stdin':
+                    await redis_client.publish(input_channel, msg['data'].encode('utf-8'))
+        except (WebSocketDisconnect, json.JSONDecodeError): pass
+        finally: stop_event.set(); await redis_client.publish(input_channel, b'__TERMINATE__')
 
     async def listen_from_redis(ws: WebSocket):
-        raw_redis = redis.from_url(REDIS_URL)
-        pubsub = raw_redis.pubsub()
-        await pubsub.subscribe(output_ch)
+        # Gunakan client redis terpisah untuk data byte mentah
+        raw_redis_client = redis.from_url(REDIS_URL)
+        pubsub = raw_redis_client.pubsub()
+        await pubsub.subscribe(output_channel)
         try:
             while not stop_event.is_set():
-                msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-                if msg: await ws.send_bytes(msg['data'])
+                message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
+                if message: await ws.send_bytes(message['data'])
                 await asyncio.sleep(0.01)
-        finally: await pubsub.unsubscribe(output_ch); await raw_redis.close()
+        finally: await pubsub.unsubscribe(output_channel); await raw_redis_client.close()
 
     listener_task = asyncio.create_task(listen_from_redis(websocket))
     forwarder_task = asyncio.create_task(forward_to_redis(websocket))
     
-    try: await asyncio.gather(listener_task, forwarder_task)
-    except Exception: pass
+    try:
+        await asyncio.gather(listener_task, forwarder_task)
+    except Exception as e: print(f"Console websocket error: {e}")
     finally: stop_event.set(); print(f"Console session for {container_name} closed.")
