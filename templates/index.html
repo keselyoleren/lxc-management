@@ -1,256 +1,196 @@
-{% extends "base.html" %}
-
-{% block content %}
-<!-- Muat library Chart.js dari CDN -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
-<style>
-    .stat-card { margin-bottom: 1.5rem; }
-    .chart-container { position: relative; height: 250px; width: 100%; }
-</style>
-
-<!-- Area Notifikasi Real-time -->
-<div id="notifications" class="mb-3"></div>
-
-<!-- Dasbor Monitoring Host -->
-<h3 class="mb-3">Server Status</h3>
-<div class="row">
-    <!-- CPU Usage -->
-    <div class="col-lg-4 col-md-6">
-        <div class="card stat-card">
-            <div class="card-body">
-                <h5 class="card-title">CPU Usage</h5>
-                <p class="card-text fs-2 fw-bold" id="cpu-usage-text">0.0%</p>
-                <div class="progress" style="height: 10px;">
-                    <div id="cpu-progress" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                </div>
-            </div>
-        </div>
+<!doctype html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>LXC Web Manager</title>
+    <!-- Bootstrap & Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Xterm.js -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { display: flex; height: 100vh; overflow: hidden; font-size: 0.9rem; }
+        .sidebar { flex: 0 0 280px; background-color: #2c3e50; color: #ecf0f1; padding: 0; display: flex; flex-direction: column; }
+        .sidebar-header { padding: 1rem; background-color: #23313f; font-weight: bold; }
+        .sidebar-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
+        .sidebar-list li { padding: 0.75rem 1.5rem; cursor: pointer; border-left: 4px solid transparent; transition: all 0.2s ease-in-out; }
+        .sidebar-list li:hover { background-color: #34495e; }
+        .sidebar-list li.active { background-color: #34495e; border-left-color: #3498db; }
+        .sidebar-list .container-item { padding-left: 2.5rem; }
+        .main-content { flex-grow: 1; display: flex; flex-direction: column; background-color: #34495e; }
+        .main-header { padding: 1rem; background-color: #2c3e50; color: #ecf0f1; display: flex; justify-content: space-between; align-items: center; }
+        .main-view { padding: 1.5rem; flex-grow: 1; overflow-y: auto; }
+        .view { display: none; }
+        .view.active { display: block; }
+        .content-menu { list-style: none; padding: 0; margin: 0 0 1.5rem 0; border-bottom: 1px solid #4a627a; }
+        .content-menu li { display: inline-block; }
+        .content-menu a { display: block; padding: 0.75rem 1.25rem; color: #bdc3c7; text-decoration: none; border-bottom: 3px solid transparent; }
+        .content-menu a.active { color: #ffffff; border-bottom-color: #3498db; }
+        #console-view-content { height: 60vh; background-color: #000; }
+        .chart-container { position: relative; height: 200px; width: 100%; }
+        .state-icon { margin-right: 0.5rem; }
+        .state-running { color: #2ecc71; }
+        .state-stopped { color: #e74c3c; }
+        .toast-container { z-index: 1090; }
+        .stat-card { margin-bottom: 1.5rem; }
+        /* Gaya untuk Context Menu */
+        .context-menu { position: absolute; z-index: 1000; display: none; background-color: #2c3e50; border: 1px solid #4a627a; border-radius: 0.25rem; padding: 0.5rem 0; min-width: 160px; box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15); }
+        .context-menu-item { display: block; width: 100%; padding: 0.5rem 1rem; clear: both; font-weight: 400; color: #ecf0f1; text-align: inherit; white-space: nowrap; background-color: transparent; border: 0; cursor: pointer; }
+        .context-menu-item:hover { background-color: #34495e; }
+        .context-menu-item i { margin-right: 0.75rem; }
+    </style>
+</head>
+<body>
+    <!-- ... (Struktur HTML utama tidak berubah) ... -->
+    <aside class="sidebar"><div class="sidebar-header">Server View</div><ul class="sidebar-list" id="sidebar-list"><li id="datacenter-link" data-view-id="server-view"><i class="bi bi-database-fill state-icon"></i> Datacenter</li></ul></aside>
+    <main class="main-content"><header class="main-header"><h4 id="main-header-title">Datacenter</h4><div><button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createContainerModal"><i class="bi bi-plus-circle"></i> Create CT</button></div></header><div class="main-view"><div id="server-view" class="view"><div class="row"><div class="col-lg-4"><div class="card stat-card"><div class="card-body"><h5 class="card-title">CPU Usage</h5><p class="card-text fs-2 fw-bold" id="host-cpu-text">0.0%</p><div class="progress" style="height: 10px;"><div id="host-cpu-progress" class="progress-bar" role="progressbar"></div></div></div></div></div><div class="col-lg-4"><div class="card stat-card"><div class="card-body"><h5 class="card-title">RAM Usage</h5><p class="card-text fs-2 fw-bold" id="host-ram-text">0%</p><small class="text-muted" id="host-ram-details">0 GB / 0 GB</small><div class="progress mt-2" style="height: 10px;"><div id="host-ram-progress" class="progress-bar bg-success" role="progressbar"></div></div></div></div></div><div class="col-lg-4"><div class="card stat-card"><div class="card-body"><h5 class="card-title">Disk Usage</h5><p class="card-text fs-2 fw-bold" id="host-disk-text">0%</p><small class="text-muted" id="host-disk-details">0 GB / 0 GB</small><div class="progress mt-2" style="height: 10px;"><div id="host-disk-progress" class="progress-bar bg-warning" role="progressbar"></div></div></div></div></div></div><div class="row"><div class="col-lg-6"><div class="card"><div class="card-body"><h5>CPU Usage History</h5><div class="chart-container"><canvas id="hostCpuChart"></canvas></div></div></div></div><div class="col-lg-6"><div class="card"><div class="card-body"><h5>Memory Usage History</h5><div class="chart-container"><canvas id="hostRamChart"></canvas></div></div></div></div></div></div><div id="container-view" class="view"><ul class="content-menu" id="content-menu"><li><a href="#summary" class="active">Summary</a></li><li><a href="#console">Console</a></li></ul><div id="summary-view-content" class="content-panel active"><div class="row"><div class="col-md-6 mb-4"><h5>CPU Usage</h5><div class="chart-container"><canvas id="containerCpuChart"></canvas></div></div><div class="col-md-6 mb-4"><h5>Memory Usage</h5><div class="chart-container"><canvas id="containerRamChart"></canvas></div></div></div></div><div id="console-view-content" class="content-panel" style="display: none;"></div></div></div></main>
+    <div class="modal fade" id="createContainerModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><form id="create-container-form"><div class="modal-header"><h5 class="modal-title">Create New Container</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-3"><label for="name" class="form-label">Container Name</label><input type="text" class="form-control" id="name" name="name" required></div><div class="mb-3"><label for="template" class="form-label">Template</label><input type="text" class="form-control" id="template" name="template" value="ubuntu" readonly></div><div class="mb-3"><label for="ram_limit" class="form-label">RAM Limit (MB)</label><input type="number" class="form-control" id="ram_limit" name="ram_limit" placeholder="e.g., 512" min="64"></div><div class="mb-3"><label for="cpu_limit" class="form-label">CPU Cores</label><input type="number" class="form-control" id="cpu_limit" name="cpu_limit" placeholder="e.g., 1" min="1"></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button><button type="submit" class="btn btn-primary">Create</button></div></form></div></div></div>
+    <div class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+    
+    <!-- Context Menu HTML -->
+    <div id="context-menu" class="context-menu">
+        <a href="#" class="context-menu-item" id="context-start"><i class="bi bi-play-fill"></i> Start</a>
+        <a href="#" class="context-menu-item" id="context-stop"><i class="bi bi-stop-fill"></i> Stop</a>
+        <a href="#" class="context-menu-item" id="context-destroy"><i class="bi bi-trash-fill"></i> Destroy</a>
     </div>
-    <!-- RAM Usage -->
-    <div class="col-lg-4 col-md-6">
-        <div class="card stat-card">
-            <div class="card-body">
-                <h5 class="card-title">RAM Usage</h5>
-                <p class="card-text fs-2 fw-bold" id="ram-usage-text">0%</p>
-                <small class="text-muted" id="ram-usage-details">0.0 GB / 0.0 GB</small>
-                <div class="progress mt-2" style="height: 10px;">
-                    <div id="ram-progress" class="progress-bar bg-success" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-    <!-- Disk Usage -->
-    <div class="col-lg-4 col-md-6">
-        <div class="card stat-card">
-            <div class="card-body">
-                <h5 class="card-title">Root Disk Usage</h5>
-                <p class="card-text fs-2 fw-bold" id="disk-usage-text">0%</p>
-                <small class="text-muted" id="disk-usage-details">0.0 GB / 0.0 GB</small>
-                <div class="progress mt-2" style="height: 10px;">
-                    <div id="disk-progress" class="progress-bar bg-warning" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 
-<!-- Grafik Real-time -->
-<div class="row">
-    <div class="col-lg-6">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">CPU Usage History</h5>
-                <div class="chart-container">
-                    <canvas id="cpuChart"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-6">
-        <div class="card">
-            <div class="card-body">
-                <h5 class="card-title">Memory Usage History</h5>
-                <div class="chart-container">
-                    <canvas id="ramChart"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+    <!-- JS Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
-<hr class="my-4">
+    <!-- App Logic -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const App = {
+                elements: {
+                    sidebarList: document.getElementById('sidebar-list'),
+                    mainHeaderTitle: document.getElementById('main-header-title'),
+                    views: document.querySelectorAll('.view'),
+                    contentMenu: document.getElementById('content-menu'),
+                    createForm: document.getElementById('create-container-form'),
+                    createModal: new bootstrap.Modal(document.getElementById('createContainerModal')),
+                    toastContainer: document.querySelector('.toast-container'),
+                    contextMenu: document.getElementById('context-menu'),
+                },
+                state: {
+                    activeContainer: null,
+                    activeView: 'server-view',
+                    charts: {},
+                    websockets: {},
+                    terminal: null,
+                    containers: [],
+                },
 
-<!-- Bagian Manajemen Container (tidak berubah) -->
-<div class="row mt-4">
-    <div class="col-md-4">
-        <h3>Create New Container</h3>
-        <!-- Form pembuatan container -->
-        <div class="card"><div class="card-body"><form id="create-container-form">
-            <div class="mb-3"><label for="name" class="form-label">Container Name</label><input type="text" class="form-control" id="name" name="name" required></div>
-            <div class="mb-3"><label for="template" class="form-label">Template</label><input type="text" class="form-control" id="template" name="template" value="ubuntu" readonly></div>
-            <div class="mb-3"><label for="ram_limit" class="form-label">RAM Limit (MB)</label><input type="number" class="form-control" id="ram_limit" name="ram_limit" placeholder="Contoh: 512" min="64"></div>
-            <div class="mb-3"><label for="cpu_limit" class="form-label">CPU Cores</label><input type="number" class="form-control" id="cpu_limit" name="cpu_limit" placeholder="Contoh: 1" min="1"></div>
-            <button type="submit" class="btn btn-primary w-100 d-flex align-items-center justify-content-center"><span id="create-btn-text">Create</span><div id="create-btn-spinner" class="spinner-border spinner-border-sm d-none" role="status"></div></button>
-        </form></div></div>
-    </div>
-    <div class="col-md-8">
-        <h3>Existing Containers</h3>
-        <!-- Tabel container -->
-        <div class="table-responsive"><table class="table table-striped table-hover align-middle"><thead class="table-dark"><tr><th>Name</th><th>State</th><th>IP Address</th><th>RAM Limit</th><th>CPU Cores</th><th>Actions</th></tr></thead><tbody id="container-table-body">
-            {% for c in containers %}<tr id="container-row-{{ c.name }}"><td class="container-name">{{ c.name }}</td><td class="container-state"></td><td class="container-ips">{{ c.ips | join(', ') if c.ips else 'N/A' }}</td><td class="container-ram">{{ c.ram_limit }}</td><td class="container-cpu">{{ c.cpu_limit }}</td>
-            <td class="container-actions">
-                <div class="btn-group" role="group">
-                    <form action="/container/{{ c.name }}/start" method="post" class="d-inline"><button type="submit" class="btn btn-sm btn-outline-success btn-start">Start</button></form>
-                    <form action="/container/{{ c.name }}/stop" method="post" class="d-inline"><button type="submit" class="btn btn-sm btn-outline-warning btn-stop">Stop</button></form>
-                    <!-- Tombol Console Baru -->
-                    <a href="/container/{{ c.name }}/console" target="_blank" class="btn btn-sm btn-outline-primary btn-console" role="button">Console</a>
-                    <form action="/container/{{ c.name }}/destroy" method="post" class="d-inline" onsubmit="return confirm('Anda yakin ingin menghapus permanen container ini?');"><button type="submit" class="btn btn-sm btn-outline-danger btn-destroy">Destroy</button></form>
-                </div>
-            </td>
-            <script>document.addEventListener('DOMContentLoaded', function() { updateContainerRow("{{ c.name }}", { state: "{{ c.state }}", ips: {{ c.ips | tojson }} }); });</script></tr>
-            {% else %}<tr id="no-containers-row"><td colspan="6" class="text-center">No containers found.</td></tr>{% endfor %}
-        </tbody></table></div>
-    </div>
-</div>
+                init() {
+                    this.bindEvents();
+                    this.loadContainers();
+                    this.handleHashChange();
+                    this.connectGlobalWebSocket();
+                },
 
-<template id="container-row-template">
-    <tr id=""><td class="container-name"></td><td class="container-state"></td><td class="container-ips">N/A</td><td class="container-ram"></td><td class="container-cpu"></td><td class="container-actions"><div class="btn-group" role="group"><form action="" method="post" class="d-inline"><button type="submit" class="btn btn-sm btn-outline-success btn-start" disabled>Start</button></form><form action="" method="post" class="d-inline"><button type="submit" class="btn btn-sm btn-outline-warning btn-stop" disabled>Stop</button></form><form action="" method="post" class="d-inline" onsubmit="return confirm('Anda yakin ingin menghapus permanen container ini?');"><button type="submit" class="btn btn-sm btn-outline-danger btn-destroy" disabled>Destroy</button></form></div></td></tr>
-</template>
-
-<!-- JavaScript Utama -->
-<script>
-    function updateContainerRow(name, data) {
-        const row = document.getElementById(`container-row-${name}`); if (!row) return;
-        const { state, ips } = data;
-        const stateCell = row.querySelector('.container-state'); const ipsCell = row.querySelector('.container-ips'); const actionsCell = row.querySelector('.container-actions'); const startBtn = actionsCell.querySelector('.btn-start'); const stopBtn = actionsCell.querySelector('.btn-stop'); const destroyBtn = actionsCell.querySelector('.btn-destroy'); const consoleBtn = actionsCell.querySelector('.btn-console');
-        let stateBadge = ''; const spinner = `<div class="spinner-border spinner-border-sm me-2" role="status"></div>`;
-        startBtn.disabled = false; stopBtn.disabled = false; destroyBtn.disabled = false; consoleBtn.classList.remove('disabled'); actionsCell.style.opacity = 1;
-        if (state === 'RUNNING') { stateBadge = `<span class="badge bg-success">RUNNING</span>`; startBtn.disabled = true; } 
-        else if (state === 'STOPPED') { stateBadge = `<span class="badge bg-danger">STOPPED</span>`; stopBtn.disabled = true; consoleBtn.classList.add('disabled'); } 
-        else if (state === 'STARTING' || state === 'STOPPING' || state === 'DELETING') { const badgeClass = state === 'STARTING' ? 'bg-info' : 'bg-warning'; stateBadge = `<span class="badge ${badgeClass}">${spinner}${state}</span>`; startBtn.disabled = true; stopBtn.disabled = true; destroyBtn.disabled = true; consoleBtn.classList.add('disabled'); actionsCell.style.opacity = 0.5; } 
-        else { stateBadge = `<span class="badge bg-secondary">${state}</span>`; consoleBtn.classList.add('disabled'); }
-        stateCell.innerHTML = stateBadge; ipsCell.textContent = Array.isArray(ips) && ips.length > 0 ? ips.join(', ') : 'N/A';
-    }
-
-    // Fungsi untuk memformat byte menjadi unit yang lebih besar (GB, MB, etc.)
-    function formatBytes(bytes, decimals = 2) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const dm = decimals < 0 ? 0 : decimals;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-    }
-
-    // Fungsi untuk memperbarui baris container (tidak berubah)
-    function updateContainerRow(name, data) {
-        const row = document.getElementById(`container-row-${name}`); if (!row) return;
-        const { state, ips } = data;
-        const stateCell = row.querySelector('.container-state'); const ipsCell = row.querySelector('.container-ips'); const actionsCell = row.querySelector('.container-actions'); const startBtn = actionsCell.querySelector('.btn-start'); const stopBtn = actionsCell.querySelector('.btn-stop'); const destroyBtn = actionsCell.querySelector('.btn-destroy');
-        let stateBadge = ''; const spinner = `<div class="spinner-border spinner-border-sm me-2" role="status"></div>`;
-        startBtn.disabled = false; stopBtn.disabled = false; destroyBtn.disabled = false; actionsCell.style.opacity = 1;
-        if (state === 'RUNNING') { stateBadge = `<span class="badge bg-success">RUNNING</span>`; startBtn.disabled = true; } 
-        else if (state === 'STOPPED') { stateBadge = `<span class="badge bg-danger">STOPPED</span>`; stopBtn.disabled = true; } 
-        else if (state === 'STARTING' || state === 'STOPPING' || state === 'DELETING') { const badgeClass = state === 'STARTING' ? 'bg-info' : 'bg-warning'; stateBadge = `<span class="badge ${badgeClass}">${spinner}${state}</span>`; startBtn.disabled = true; stopBtn.disabled = true; destroyBtn.disabled = true; actionsCell.style.opacity = 0.5; } 
-        else { stateBadge = `<span class="badge bg-secondary">${state}</span>`; }
-        stateCell.innerHTML = stateBadge; ipsCell.textContent = Array.isArray(ips) && ips.length > 0 ? ips.join(', ') : 'N/A';
-    }
-
-    document.addEventListener("DOMContentLoaded", function() {
-        const notificationsDiv = document.getElementById('notifications');
-        const createForm = document.getElementById('create-container-form');
-        const tableBody = document.getElementById('container-table-body');
-        const rowTemplate = document.getElementById('container-row-template');
-        
-        // Elemen UI untuk statistik host
-        const cpuUsageText = document.getElementById('cpu-usage-text');
-        const cpuProgress = document.getElementById('cpu-progress');
-        const ramUsageText = document.getElementById('ram-usage-text');
-        const ramUsageDetails = document.getElementById('ram-usage-details');
-        const ramProgress = document.getElementById('ram-progress');
-        const diskUsageText = document.getElementById('disk-usage-text');
-        const diskUsageDetails = document.getElementById('disk-usage-details');
-        const diskProgress = document.getElementById('disk-progress');
-
-        // Fungsi helper untuk membuat chart
-        function createChart(canvasId, label) {
-            const ctx = document.getElementById(canvasId).getContext('2d');
-            return new Chart(ctx, {
-                type: 'line',
-                data: { labels: [], datasets: [{ label: label, data: [], borderColor: 'rgba(75, 192, 192, 1)', backgroundColor: 'rgba(75, 192, 192, 0.2)', fill: true, tension: 0.4 }] },
-                options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 100 }, x: { display: false } }, plugins: { legend: { display: false } } }
-            });
-        }
-        
-        const cpuChart = createChart('cpuChart', 'CPU Usage (%)');
-        const ramChart = createChart('ramChart', 'RAM Usage (%)');
-
-        function addDataToChart(chart, label, data) {
-            chart.data.labels.push(label);
-            chart.data.datasets.forEach((dataset) => { dataset.data.push(data); });
-            // Batasi jumlah data point agar tidak terlalu berat
-            if (chart.data.labels.length > 30) {
-                chart.data.labels.shift();
-                chart.data.datasets.forEach((dataset) => { dataset.data.shift(); });
-            }
-            chart.update('quiet');
-        }
-
-        // Logika form pembuatan container (tidak berubah)
-        createForm.addEventListener('submit', function(event) {
-            event.preventDefault(); const formData = new FormData(createForm); const name = formData.get('name'); if (!name || document.getElementById(`container-row-${name}`)) return;
-            const noContainersRow = document.getElementById('no-containers-row'); if(noContainersRow) noContainersRow.remove();
-            const newRow = rowTemplate.content.cloneNode(true).querySelector('tr'); newRow.id = `container-row-${name}`; newRow.querySelector('.container-name').textContent = name; newRow.querySelector('.container-ram').textContent = formData.get('ram_limit') ? `${formData.get('ram_limit')}M` : 'Default'; newRow.querySelector('.container-cpu').textContent = formData.get('cpu_limit') || 'Default'; newRow.querySelector('.container-state').innerHTML = `<span class="badge bg-info"><div class="spinner-border spinner-border-sm me-2" role="status"></div>CREATING</span>`; tableBody.prepend(newRow);
-            fetch('/create', { method: 'POST', body: formData }); createForm.reset();
-        });
-
-        // Koneksi WebSocket
-        const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`);
-        ws.onmessage = function(event) {
-            try {
-                const message = JSON.parse(event.data);
+                bindEvents() {
+                    window.addEventListener('hashchange', this.handleHashChange.bind(this));
+                    this.elements.sidebarList.addEventListener('click', this.handleSidebarClick.bind(this));
+                    this.elements.sidebarList.addEventListener('contextmenu', this.handleSidebarRightClick.bind(this));
+                    this.elements.contentMenu.addEventListener('click', this.handleContentMenuClick.bind(this));
+                    this.elements.createForm.addEventListener('submit', this.handleCreateFormSubmit.bind(this));
+                    document.addEventListener('click', () => this.elements.contextMenu.style.display = 'none');
+                },
                 
-                if (message.type === 'host_stats') {
-                    const stats = message.data;
-                    // Update CPU
-                    cpuUsageText.textContent = `${stats.cpu.toFixed(1)}%`;
-                    cpuProgress.style.width = `${stats.cpu}%`;
-                    cpuProgress.setAttribute('aria-valuenow', stats.cpu);
-                    // Update RAM
-                    ramUsageText.textContent = `${stats.ram.percent.toFixed(1)}%`;
-                    ramUsageDetails.textContent = `${formatBytes(stats.ram.used)} / ${formatBytes(stats.ram.total)}`;
-                    ramProgress.style.width = `${stats.ram.percent}%`;
-                    ramProgress.setAttribute('aria-valuenow', stats.ram.percent);
-                    // Update Disk
-                    diskUsageText.textContent = `${stats.disk.percent.toFixed(1)}%`;
-                    diskUsageDetails.textContent = `${formatBytes(stats.disk.used)} / ${formatBytes(stats.disk.total)}`;
-                    diskProgress.style.width = `${stats.disk.percent}%`;
-                    diskProgress.setAttribute('aria-valuenow', stats.disk.percent);
+                showToast(message, status = 'info') { const toastEl = document.createElement('div'); const bgClass = status === 'error' ? 'bg-danger text-white' : (status === 'info' ? 'bg-info text-dark' : 'bg-success text-white'); toastEl.className = `toast align-items-center ${bgClass} border-0`; toastEl.setAttribute('role', 'alert'); toastEl.innerHTML = `<div class="d-flex"><div class="toast-body">${message}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`; this.elements.toastContainer.appendChild(toastEl); const toast = new bootstrap.Toast(toastEl, { delay: 5000 }); toast.show(); toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove()); },
+                formatBytes(bytes) { if (bytes === 0) return '0 Bytes'; const k = 1024; const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']; const i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]; },
+                createChart(canvasId, label, yCallback) { if (this.state.charts[canvasId]) this.state.charts[canvasId].destroy(); const ctx = document.getElementById(canvasId).getContext('2d'); const options = { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { color: '#bdc3c7' } }, x: { display: false } }, plugins: { legend: { display: false } } }; if (yCallback) options.scales.y.ticks.callback = yCallback; if(label.includes('CPU')) options.scales.y.max = 100; this.state.charts[canvasId] = new Chart(ctx, { type: 'line', data: { labels: [], datasets: [{ label: label, data: [], borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.2)', fill: true, tension: 0.4, pointRadius: 0 }] }, options }); },
+                addDataToChart(chartId, data) { const chart = this.state.charts[chartId]; if (!chart) return; chart.data.labels.push(new Date().toLocaleTimeString()); chart.data.datasets[0].data.push(data); if (chart.data.labels.length > 20) { chart.data.labels.shift(); chart.data.datasets[0].data.shift(); } chart.update('quiet'); },
+                cleanupConnections() { Object.values(this.state.websockets).forEach(ws => ws.close()); this.state.websockets = {}; if (this.state.terminal) { this.state.terminal.dispose(); this.state.terminal = null; } },
+                handleSidebarClick(e) { const targetLi = e.target.closest('li'); if (!targetLi) return; const viewId = targetLi.dataset.viewId; const containerName = targetLi.dataset.containerName; if (viewId === 'server-view') { window.location.hash = '/server/summary'; } else if (containerName) { window.location.hash = `/container/${containerName}/summary`; } },
+                handleContentMenuClick(e) { if (e.target.tagName === 'A' && this.state.activeContainer) { e.preventDefault(); window.location.hash = `/container/${this.state.activeContainer}/${e.target.hash.slice(1)}`; } },
+                async handleCreateFormSubmit(e) { e.preventDefault(); const formData = new FormData(this.elements.createForm); try { const response = await fetch('/api/containers', { method: 'POST', body: formData }); if (response.ok) { this.showToast('Creation task has been queued.', 'info'); this.elements.createModal.hide(); this.elements.createForm.reset(); } else { const error = await response.json(); this.showToast(`Error: ${error.message}`, 'error'); } } catch (error) { this.showToast('Failed to submit creation task.', 'error'); } },
+                handleSidebarRightClick(e) { const targetLi = e.target.closest('li.container-item'); if (!targetLi) return; e.preventDefault(); const containerName = targetLi.dataset.containerName; const containerState = this.state.containers.find(c => c.name === containerName)?.state; const menu = this.elements.contextMenu; menu.style.display = 'block'; menu.style.left = `${e.pageX}px`; menu.style.top = `${e.pageY}px`; const startBtn = document.getElementById('context-start'); const stopBtn = document.getElementById('context-stop'); const destroyBtn = document.getElementById('context-destroy'); startBtn.style.display = containerState === 'STOPPED' ? 'block' : 'none'; stopBtn.style.display = containerState === 'RUNNING' ? 'block' : 'none'; destroyBtn.style.display = containerState === 'STOPPED' ? 'block' : 'none'; startBtn.onclick = () => this.triggerContainerAction(containerName, 'start'); stopBtn.onclick = () => this.triggerContainerAction(containerName, 'stop'); destroyBtn.onclick = () => { if (confirm(`Anda yakin ingin menghapus permanen container "${containerName}"?`)) { this.triggerContainerAction(containerName, 'destroy'); } }; },
+                async triggerContainerAction(name, action) { try { await fetch(`/api/containers/${name}/${action}`, { method: 'POST' }); } catch (error) { this.showToast(`Gagal memicu aksi '${action}' pada ${name}.`, 'error'); } },
+                async loadContainers() { try { const response = await fetch('/api/containers'); this.state.containers = await response.json(); this.elements.sidebarList.querySelectorAll('.container-item').forEach(el => el.remove()); this.state.containers.forEach(c => { const iconClass = c.state === 'RUNNING' ? 'bi-play-circle-fill state-running' : 'bi-stop-circle-fill state-stopped'; const li = document.createElement('li'); li.dataset.containerName = c.name; li.className = 'container-item'; li.innerHTML = `<i class="bi ${iconClass} state-icon"></i> ${c.name}`; this.elements.sidebarList.appendChild(li); }); } catch (error) { console.error("Failed to load containers:", error); } },
+                switchView(viewId, title) { this.state.activeView = viewId; this.elements.mainHeaderTitle.textContent = title; this.elements.views.forEach(v => v.classList.toggle('active', v.id === viewId)); document.querySelectorAll('#sidebar-list li').forEach(li => { li.classList.toggle('active', li.dataset.viewId === viewId || li.dataset.containerName === this.state.activeContainer); }); },
+                renderHostView() { this.cleanupConnections(); this.state.activeContainer = null; this.switchView('server-view', 'Datacenter'); this.createChart('hostCpuChart', 'CPU Usage (%)'); this.createChart('hostRamChart', 'Memory Usage (%)'); },
+                
+                renderContainerView(containerName, subView = 'summary') {
+                    this.cleanupConnections();
+                    this.state.activeContainer = containerName;
+                    this.switchView('container-view', `Container: ${containerName}`);
+                    
+                    document.querySelectorAll('.content-menu a').forEach(tab => tab.classList.toggle('active', tab.hash === `#${subView}`));
+                    document.querySelectorAll('.content-panel').forEach(panel => panel.style.display = 'none');
 
-                    // Update Charts
-                    const timeLabel = new Date().toLocaleTimeString();
-                    addDataToChart(cpuChart, timeLabel, stats.cpu);
-                    addDataToChart(ramChart, timeLabel, stats.ram.percent);
+                    if (subView === 'summary') {
+                        document.getElementById('summary-view-content').style.display = 'block';
+                        this.createChart('containerCpuChart', 'CPU Usage (%)');
+                        this.createChart('containerRamChart', 'Memory Usage', this.formatBytes);
+                        
+                        const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/container/${containerName}/stats`);
+                        this.state.websockets.containerStats = ws;
+                        ws.onmessage = (event) => {
+                            const data = JSON.parse(event.data);
+                            this.addDataToChart('containerCpuChart', data.cpu);
+                            this.addDataToChart('containerRamChart', data.ram);
+                        };
+                    } else if (subView === 'console') {
+                        const consoleContainer = document.getElementById('console-view-content');
+                        consoleContainer.style.display = 'block';
+                        consoleContainer.innerHTML = '';
+                        this.state.terminal = new Terminal({ cursorBlink: true, theme: { background: '#000', foreground: '#fff' } });
+                        const fitAddon = new FitAddon.FitAddon();
+                        this.state.terminal.loadAddon(fitAddon);
+                        this.state.terminal.open(consoleContainer);
+                        fitAddon.fit();
+                        const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/console/${containerName}`);
+                        ws.binaryType = 'arraybuffer'; // Sangat penting untuk data PTY
+                        this.state.websockets.console = ws;
+                        
+                        ws.onopen = () => this.state.terminal.writeln('--- Connected ---');
+                        ws.onmessage = (event) => {
+                            // event.data adalah ArrayBuffer, Xterm.js butuh Uint8Array
+                            this.state.terminal.write(new Uint8Array(event.data));
+                        };
+                        ws.onclose = () => this.state.terminal.writeln('\r\n--- Disconnected ---');
+                        
+                        // FIX: Kirim data sebagai biner, bukan teks
+                        this.state.terminal.onData(data => {
+                            if (ws.readyState === WebSocket.OPEN) {
+                                // Menggunakan TextEncoder untuk mengubah string menjadi Uint8Array (biner)
+                                const encoder = new TextEncoder();
+                                ws.send(encoder.encode(data));
+                            }
+                        });
+                    }
+                },
 
-                } else if (message.type === 'status_update') {
-                    updateContainerRow(message.data.name, message.data);
-                } else if (message.type === 'creation_complete') {
-                    const { name, ram_limit, cpu_limit } = message.data; const row = document.getElementById(`container-row-${name}`); if (!row) return;
-                    row.querySelector('.container-ram').textContent = ram_limit; row.querySelector('.container-cpu').textContent = cpu_limit;
-                    row.querySelectorAll('form').forEach(form => { const action = form.getAttribute('action').split('/').pop(); form.setAttribute('action', `/container/${name}/${action}`); });
-                    updateContainerRow(name, message.data);
-                } else if (message.type === 'creation_failed' || message.data.state === 'DELETED') {
-                    const name = message.data.name; const row = document.getElementById(`container-row-${name}`); if (row) row.remove();
-                } else if (message.type === 'notification') {
-                    const alertElement = document.createElement('div'); alertElement.className = 'alert alert-info alert-dismissible fade show'; alertElement.role = 'alert';
-                    alertElement.innerHTML = `${message.data.message}<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>`;
-                    notificationsDiv.prepend(alertElement);
+                handleHashChange() { const hash = window.location.hash.slice(1); const parts = hash.split('/').filter(p => p); if (parts.length >= 2 && parts[0] === 'server') { this.renderHostView(); } else if (parts.length >= 2 && parts[0] === 'container') { this.renderContainerView(parts[1], parts[2] || 'summary'); } else { window.location.hash = '/server/summary'; } },
+
+                connectGlobalWebSocket() {
+                    const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/events`);
+                    ws.onmessage = (event) => {
+                        const message = JSON.parse(event.data);
+                        if (message.type === 'host_stats') {
+                            if (this.state.activeView !== 'server-view') return;
+                            const stats = message.data;
+                            document.getElementById('host-cpu-text').textContent = `${stats.cpu.toFixed(1)}%`; document.getElementById('host-cpu-progress').style.width = `${stats.cpu}%`; document.getElementById('host-ram-text').textContent = `${stats.ram.percent.toFixed(1)}%`; document.getElementById('host-ram-details').textContent = `${this.formatBytes(stats.ram.used)} / ${this.formatBytes(stats.ram.total)}`; document.getElementById('host-ram-progress').style.width = `${stats.ram.percent}%`; document.getElementById('host-disk-text').textContent = `${stats.disk.percent.toFixed(1)}%`; document.getElementById('host-disk-details').textContent = `${this.formatBytes(stats.disk.used)} / ${this.formatBytes(stats.disk.total)}`; document.getElementById('host-disk-progress').style.width = `${stats.disk.percent}%`;
+                            this.addDataToChart('hostCpuChart', stats.cpu);
+                            this.addDataToChart('hostRamChart', stats.ram.percent);
+                        } else if (message.type === 'list_update') {
+                            this.loadContainers();
+                            this.showToast(message.data.message, 'success');
+                        } else if (message.type === 'notification') {
+                            this.showToast(message.data.message, message.data.status);
+                        }
+                    };
+                    ws.onclose = () => setTimeout(() => this.connectGlobalWebSocket(), 5000);
                 }
-            } catch (e) {
-                console.error("Failed to parse WebSocket message:", e);
-            }
-        };
-    });
-</script>
-{% endblock %}
+            };
+
+            App.init();
+        });
+    </script>
+</body>
+</html>
