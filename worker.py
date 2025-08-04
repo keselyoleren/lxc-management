@@ -50,7 +50,7 @@ def create_lxc_container_task(name, template, ram_limit, cpu_limit):
     try:
         c = lxc.Container(name)
         if c.defined:
-            publish_global_event("notification", {"status": "error", "message": f"Container '{name}' sudah ada."})
+            publish_global_event("notification", {"status": "error", "message": f"Container '{name}' already exists."})
             return
 
         c.create(template)
@@ -79,10 +79,10 @@ def container_action_task(name, action):
     try:
         c = lxc.Container(name)
         if not c.defined:
-            publish_global_event("notification", {"status": "error", "message": f"Container '{name}' tidak ditemukan."})
+            publish_global_event("notification", {"status": "error", "message": f"Container '{name}' not found."})
             return
 
-        publish_global_event("notification", {"status": "info", "message": f"Memulai aksi '{action}' pada '{name}'..."})
+        publish_global_event("notification", {"status": "info", "message": f"Starting action '{action}' on '{name}'..."})
         if action == "start":
             c.start()
             c.wait("RUNNING", 10)
@@ -95,10 +95,10 @@ def container_action_task(name, action):
                 c.wait("STOPPED", 10)
             c.destroy()
         
-        publish_global_event("list_update", {"message": f"Aksi '{action}' pada container '{name}' berhasil."})
+        publish_global_event("list_update", {"message": f"Action '{action}' on container '{name}' succeeded."})
 
     except Exception as e:
-        publish_global_event("notification", {"status": "error", "message": f"Aksi '{action}' pada '{name}' gagal: {e}"})
+        publish_global_event("notification", {"status": "error", "message": f"Action '{action}' on '{name}' failed: {e}"})
 
 
 @celery_app.task
