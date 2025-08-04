@@ -25,7 +25,6 @@ This project is designed to help manage Linux containers (LXC) programmatically.
 ├── settings.py       # Configuration
 ├── worker.py         # Celery app and tasks
 ├── templates/        # HTML templates
-│   ├── base.html
 │   └── index.html
 └── __pycache__/
 ```
@@ -41,7 +40,7 @@ This project is designed to help manage Linux containers (LXC) programmatically.
 1. **Clone the repository:**
     ```sh
     git clone <your-repo-url>
-    cd lxc-learn
+    cd <project>
     ```
 2. **Install dependencies:**
     ```sh
