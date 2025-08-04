@@ -4,131 +4,351 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>LXC Web Manager</title>
-    <!-- Bootstrap & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <!-- Xterm.js -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" />
-    <!-- Chart.js -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { display: flex; height: 100vh; overflow: hidden; font-size: 0.9rem; }
-        .sidebar { flex: 0 0 280px; background-color: #2c3e50; color: #ecf0f1; padding: 0; display: flex; flex-direction: column; }
-        .sidebar-header { padding: 1rem; background-color: #23313f; font-weight: bold; }
+        /* --- THEME & FONT --- */
+        :root {
+            --bg-dark: #1a1c23;
+            --bg-medium: #23262f;
+            --bg-light: #2c2f3a;
+            --border-color: #393d49;
+            --text-primary: #f0f0f0;
+            --text-secondary: #a0a3ab;
+            --accent-primary: #0d6efd; /* Bootstrap blue for consistency */
+            --accent-green: #198754;
+            --accent-yellow: #ffc107;
+            --accent-red: #dc3545;
+        }
+        body {
+            display: flex;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        /* --- SIDEBAR --- */
+        .sidebar {
+            flex: 0 0 260px;
+            background-color: var(--bg-medium);
+            color: var(--text-secondary);
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border-color);
+        }
+        .sidebar-header {
+            padding: 1.25rem;
+            font-weight: 600;
+            font-size: 1.1rem;
+            color: var(--text-primary);
+            border-bottom: 1px solid var(--border-color);
+        }
         .sidebar-list { list-style: none; padding: 0; margin: 0; overflow-y: auto; flex-grow: 1; }
-        .sidebar-list li { padding: 0.75rem 1.5rem; cursor: pointer; border-left: 4px solid transparent; transition: all 0.2s ease-in-out; }
-        .sidebar-list li:hover { background-color: #34495e; }
-        .sidebar-list li.active { background-color: #34495e; border-left-color: #3498db; }
+        .sidebar-list li {
+            padding: 0.85rem 1.5rem;
+            cursor: pointer;
+            border-left: 4px solid transparent;
+            transition: background-color 0.2s ease, color 0.2s ease;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+        }
+        .sidebar-list li i { margin-right: 0.75rem; font-size: 1.1rem; }
+        .sidebar-list li:hover { background-color: var(--bg-light); color: var(--text-primary); }
+        .sidebar-list li.active {
+            background-color: var(--bg-light);
+            border-left-color: var(--accent-primary);
+            color: var(--text-primary);
+            font-weight: 600;
+        }
         .sidebar-list .container-item { padding-left: 2.5rem; }
-        .main-content { flex-grow: 1; display: flex; flex-direction: column; background-color: #34495e; }
-        .main-header { padding: 1rem; background-color: #2c3e50; color: #ecf0f1; display: flex; justify-content: space-between; align-items: center; }
+
+        /* --- MAIN CONTENT --- */
+        .main-content { flex-grow: 1; display: flex; flex-direction: column; background-color: var(--bg-dark); }
+        .main-header {
+            padding: 1rem 1.5rem;
+            background-color: var(--bg-medium);
+            color: var(--text-primary);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+        }
         .main-view { padding: 1.5rem; flex-grow: 1; overflow-y: auto; }
-        .view { display: none; }
+        .view { display: none; animation: fadeIn 0.5s; }
         .view.active { display: block; }
-        .content-menu { list-style: none; padding: 0; margin: 0 0 1.5rem 0; border-bottom: 1px solid #4a627a; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* --- CARD & GENERAL STYLES --- */
+        .card {
+            background-color: var(--bg-medium);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,0.15); }
+        .card-body { padding: 1.5rem; }
+        .stat-card .card-title { font-weight: 600; color: var(--text-secondary); }
+        .stat-card .card-text { color: var(--text-primary); }
+        .progress { height: 8px; background-color: var(--bg-light); border-radius: 8px; }
+
+        /* --- CONTENT MENU TABS --- */
+        .content-menu {
+            list-style: none; padding: 0; margin: 0 0 1.5rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
         .content-menu li { display: inline-block; }
-        .content-menu a { display: block; padding: 0.75rem 1.25rem; color: #bdc3c7; text-decoration: none; border-bottom: 3px solid transparent; }
-        .content-menu a.active { color: #ffffff; border-bottom-color: #3498db; }
-        #console-view-content { height: 60vh; background-color: #000; }
-        .chart-container { position: relative; height: 200px; width: 100%; }
+        .content-menu a {
+            display: block; padding: 0.75rem 1.25rem;
+            color: var(--text-secondary); text-decoration: none;
+            border-bottom: 3px solid transparent; transition: all 0.2s ease;
+            font-weight: 500;
+        }
+        .content-menu a.active, .content-menu a:hover {
+            color: var(--text-primary); border-bottom-color: var(--accent-primary);
+        }
+
+        /* --- CONTAINER SUMMARY VIEW (NEW DESIGN) --- */
+        .summary-grid-new {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+        .summary-card {
+            background-color: var(--bg-medium);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .summary-card-header {
+            display: flex; align-items: center;
+            font-size: 1.1rem; font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+        }
+        .summary-card-header i {
+            font-size: 1.5rem;
+            margin-right: 1rem;
+            color: var(--accent-primary);
+            width: 30px;
+        }
+        .summary-info-item {
+            display: flex; justify-content: space-between;
+            padding: 0.6rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .summary-info-item:last-child { border-bottom: none; }
+        .summary-info-item .label { color: var(--text-secondary); }
+        .summary-info-item .value { font-weight: 600; }
+        .resource-item .label { font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 0.5rem; }
+        .resource-item .value { font-size: 1.5rem; font-weight: 700; color: var(--text-primary); }
+        .resource-item .details { font-size: 0.8rem; color: var(--text-secondary); text-align: right; }
+        .resource-item .progress { height: 6px; margin-top: 0.75rem; }
+
+        /* --- OTHER COMPONENTS --- */
+        #console-view-content { height: 65vh; background-color: #000; border-radius: 0.5rem; }
+        .chart-container { position: relative; height: 220px; width: 100%; }
         .state-icon { margin-right: 0.5rem; }
-        .state-running { color: #2ecc71; }
-        .state-stopped { color: #e74c3c; }
-        .toast-container { z-index: 1090; }
-        .stat-card { margin-bottom: 1.5rem; }
-        .context-menu { position: absolute; z-index: 1000; display: none; background-color: #2c3e50; border: 1px solid #4a627a; border-radius: 0.25rem; padding: 0.5rem 0; min-width: 160px; box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15); }
-        .context-menu-item { display: block; width: 100%; padding: 0.5rem 1rem; clear: both; font-weight: 400; color: #ecf0f1; text-align: inherit; white-space: nowrap; background-color: transparent; border: 0; cursor: pointer; }
-        .context-menu-item:hover { background-color: #34495e; }
-        .context-menu-item i { margin-right: 0.75rem; }
-        .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
-        .summary-item { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #4a627a; }
-        .summary-item:last-child { border-bottom: none; }
-        .summary-item .label { display: flex; align-items: center; color: #bdc3c7; }
-        .summary-item .label i { font-size: 1.2rem; margin-right: 0.75rem; width: 20px; text-align: center; }
-        .summary-item .value { font-weight: bold; }
-        .resource-bar .progress { height: 1.5rem; background-color: #2c3e50; }
-        .resource-bar .progress-bar { font-size: 0.8rem; }
+        .state-running { color: var(--accent-green); }
+        .state-stopped { color: var(--accent-red); }
+        .modal-content { background-color: var(--bg-light); border: 1px solid var(--border-color); }
+        .form-control { background-color: var(--bg-dark); border-color: var(--border-color); color: var(--text-primary); }
+        .form-control:focus { background-color: var(--bg-dark); border-color: var(--accent-primary); color: var(--text-primary); box-shadow: none; }
+        .btn-primary { background-color: var(--accent-primary); border-color: var(--accent-primary); }
+        .context-menu { background-color: var(--bg-light); border-color: var(--border-color); }
+        .context-menu-item:hover { background-color: var(--bg-medium); }
     </style>
 </head>
 <body>
-    <!-- ... (Struktur HTML utama tidak berubah) ... -->
-    <aside class="sidebar"><div class="sidebar-header">Server View</div><ul class="sidebar-list" id="sidebar-list"><li id="datacenter-link" data-view-id="server-view"><i class="bi bi-database-fill state-icon"></i> Datacenter</li></ul></aside>
-    <main class="main-content"><header class="main-header"><h4 id="main-header-title">Datacenter</h4><div><button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createContainerModal"><i class="bi bi-plus-circle"></i> Create CT</button></div></header><div class="main-view"><div id="server-view" class="view"><div class="row"><div class="col-lg-4"><div class="card stat-card"><div class="card-body"><h5 class="card-title">CPU Usage</h5><p class="card-text fs-2 fw-bold" id="host-cpu-text">0.0%</p><div class="progress" style="height: 10px;"><div id="host-cpu-progress" class="progress-bar" role="progressbar"></div></div></div></div></div><div class="col-lg-4"><div class="card stat-card"><div class="card-body"><h5 class="card-title">RAM Usage</h5><p class="card-text fs-2 fw-bold" id="host-ram-text">0%</p><small class="text-muted" id="host-ram-details">0 GB / 0 GB</small><div class="progress mt-2" style="height: 10px;"><div id="host-ram-progress" class="progress-bar bg-success" role="progressbar"></div></div></div></div></div><div class="col-lg-4"><div class="card stat-card"><div class="card-body"><h5 class="card-title">Disk Usage</h5><p class="card-text fs-2 fw-bold" id="host-disk-text">0%</p><small class="text-muted" id="host-disk-details">0 GB / 0 GB</small><div class="progress mt-2" style="height: 10px;"><div id="host-disk-progress" class="progress-bar bg-warning" role="progressbar"></div></div></div></div></div></div><div class="row"><div class="col-lg-6"><div class="card"><div class="card-body"><h5>CPU Usage History</h5><div class="chart-container"><canvas id="hostCpuChart"></canvas></div></div></div></div><div class="col-lg-6"><div class="card"><div class="card-body"><h5>Memory Usage History</h5><div class="chart-container"><canvas id="hostRamChart"></canvas></div></div></div></div></div></div>
-        <div id="container-view" class="view">
-            <ul class="content-menu" id="content-menu">
-                <li><a href="#summary" class="active">Summary</a></li>
-                <li><a href="#console">Console</a></li>
-                <li><a href="#options">Options</a></li>
+    <aside class="sidebar">
+        <div class="sidebar-header">LXC Manager</div>
+        <ul class="sidebar-list" id="sidebar-list">
+            <li id="datacenter-link" data-view-id="server-view">
+                <i class="bi bi-database-fill"></i> Datacenter
+            </li>
             </ul>
-            <!-- Panel Konten Summary Baru -->
-            <div id="summary-view-content" class="content-panel active">
-                <div class="summary-grid">
-                    <div>
-                        <div class="summary-item"><span class="label"><i class="bi bi-info-circle"></i> Status</span><span id="ct-summary-status" class="value"></span></div>
-                        <div class="summary-item"><span class="label"><i class="bi bi-hdd-stack"></i> Node</span><span class="value">LXC Host</span></div>
-                        <div class="summary-item"><span class="label"><i class="bi bi-ubuntu"></i> OS Type</span><span class="value">Ubuntu</span></div>
+    </aside>
+
+    <main class="main-content">
+        <header class="main-header">
+            <h4 id="main-header-title" class="mb-0">Datacenter</h4>
+            <div>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createContainerModal">
+                    <i class="bi bi-plus-circle me-1"></i> Create VM
+                </button>
+            </div>
+        </header>
+
+        <div class="main-view">
+            <div id="server-view" class="view">
+                <div class="row">
+                    <div class="col-lg-4 mb-4">
+                        <div class="card stat-card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">CPU USAGE</h5>
+                                <p class="card-text fs-1 fw-bold" id="host-cpu-text">0.0%</p>
+                                <div class="progress"><div id="host-cpu-progress" class="progress-bar" role="progressbar"></div></div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="resource-bars">
-                        <div class="mb-3">
-                            <div class="d-flex justify-content-between"><span class="label"><i class="bi bi-cpu"></i> CPU usage</span><span id="ct-summary-cpu-text" class="value">0.00%</span></div>
-                            <div class="progress"><div id="ct-summary-cpu-progress" class="progress-bar" role="progressbar"></div></div>
+                    <div class="col-lg-4 mb-4">
+                        <div class="card stat-card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">RAM USAGE</h5>
+                                <p class="card-text fs-1 fw-bold" id="host-ram-text">0%</p>
+                                <div class="progress"><div id="host-ram-progress" class="progress-bar bg-success" role="progressbar"></div></div>
+                                <small class="text-muted mt-2 d-block" id="host-ram-details">0 GB / 0 GB</small>
+                            </div>
                         </div>
-                        <div class="mb-3">
-                            <div class="d-flex justify-content-between"><span class="label"><i class="bi bi-memory"></i> Memory usage</span><span id="ct-summary-ram-text" class="value">0%</span></div>
-                            <div class="progress"><div id="ct-summary-ram-progress" class="progress-bar bg-success" role="progressbar"></div></div>
-                            <div class="text-end text-muted"><small id="ct-summary-ram-details">0 B / 0 B</small></div>
-                        </div>
-                        <div class="mb-3">
-                            <div class="d-flex justify-content-between"><span class="label"><i class="bi bi-device-hdd"></i> Bootdisk size</span><span id="ct-summary-disk-text" class="value">0%</span></div>
-                            <div class="progress"><div id="ct-summary-disk-progress" class="progress-bar bg-warning" role="progressbar"></div></div>
-                            <div class="text-end text-muted"><small id="ct-summary-disk-details">0 B / 0 B</small></div>
+                    </div>
+                     <div class="col-lg-4 mb-4">
+                        <div class="card stat-card h-100">
+                            <div class="card-body">
+                                <h5 class="card-title">DISK USAGE</h5>
+                                <p class="card-text fs-1 fw-bold" id="host-disk-text">0%</p>
+                                <div class="progress"><div id="host-disk-progress" class="progress-bar bg-warning" role="progressbar"></div></div>
+                                <small class="text-muted mt-2 d-block" id="host-disk-details">0 GB / 0 GB</small>
+                            </div>
                         </div>
                     </div>
                 </div>
+                <div class="row">
+                    <div class="col-lg-6 mb-4">
+                        <div class="card"><div class="card-body">
+                            <h5>CPU Usage History</h5>
+                            <div class="chart-container"><canvas id="hostCpuChart"></canvas></div>
+                        </div></div>
+                    </div>
+                    <div class="col-lg-6 mb-4">
+                        <div class="card"><div class="card-body">
+                            <h5>Memory Usage History</h5>
+                            <div class="chart-container"><canvas id="hostRamChart"></canvas></div>
+                        </div></div>
+                    </div>
+                </div>
             </div>
-            <div id="console-view-content" class="content-panel" style="display: none;"></div>
-            <div id="options-view-content" class="content-panel" style="display: none;">
-                <h5>Resource Limits</h5>
-                <form id="edit-container-form" class="col-md-6"><div class="mb-3"><label for="edit-ram-limit" class="form-label">RAM Limit (MB)</label><input type="number" class="form-control" id="edit-ram-limit" name="ram_limit" placeholder="Kosongkan untuk tanpa batas" min="64"></div><div class="mb-3"><label for="edit-cpu-cores" class="form-label">CPU Cores</label><input type="number" class="form-control" id="edit-cpu-cores" name="cpu_cores" placeholder="Kosongkan untuk tanpa batas" min="1"></div><button type="submit" class="btn btn-primary">Save Changes</button></form>
+
+            <div id="container-view" class="view">
+                <ul class="content-menu" id="content-menu">
+                    <li><a href="#summary" class="active">Summary</a></li>
+                    <li><a href="#console">Console</a></li>
+                    <li><a href="#options">Options</a></li>
+                </ul>
+
+                <div id="summary-view-content" class="content-panel active">
+                    <div class="summary-grid-new">
+                        <div class="summary-card">
+                            <div class="summary-card-header"><i class="bi bi-info-circle-fill"></i> General</div>
+                            <div class="summary-info-item"><span class="label">Status</span><span id="ct-summary-status" class="value"></span></div>
+                            <div class="summary-info-item"><span class="label">Node</span><span class="value">LXC Host</span></div>
+                            <div class="summary-info-item"><span class="label">OS Type</span><span class="value">Ubuntu</span></div>
+                        </div>
+                        <div class="summary-card">
+                           <div class="summary-card-header"><i class="bi bi-cpu-fill" style="color:var(--accent-primary)"></i> CPU Usage</div>
+                           <div class="resource-item flex-grow-1 d-flex flex-column justify-content-center">
+                                <div class="value" id="ct-summary-cpu-text">0.00%</div>
+                                <div class="progress mt-2"><div id="ct-summary-cpu-progress" class="progress-bar" role="progressbar"></div></div>
+                           </div>
+                        </div>
+                        <div class="summary-card">
+                           <div class="summary-card-header"><i class="bi bi-memory" style="color:var(--accent-green)"></i> Memory Usage</div>
+                           <div class="resource-item flex-grow-1">
+                                <div class="value" id="ct-summary-ram-text">0%</div>
+                                <div class="progress mt-2"><div id="ct-summary-ram-progress" class="progress-bar bg-success" role="progressbar"></div></div>
+                                <div class="details mt-2" id="ct-summary-ram-details">0 B / 0 B</div>
+                           </div>
+                        </div>
+                        <div class="summary-card">
+                            <div class="summary-card-header"><i class="bi bi-device-hdd-fill" style="color:var(--accent-yellow)"></i> Bootdisk Size</div>
+                           <div class="resource-item flex-grow-1">
+                                <div class="value" id="ct-summary-disk-text">0%</div>
+                                <div class="progress mt-2"><div id="ct-summary-disk-progress" class="progress-bar bg-warning" role="progressbar"></div></div>
+                                <div class="details mt-2" id="ct-summary-disk-details">0 B / 0 B</div>
+                           </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="console-view-content" class="content-panel" style="display: none;"></div>
+                
+                <div id="options-view-content" class="content-panel" style="display: none;">
+                    <div class="card"><div class="card-body">
+                        <h5>Resource Limits</h5>
+                        <form id="edit-container-form" class="col-md-6"><div class="mb-3"><label for="edit-ram-limit" class="form-label">RAM Limit (MB)</label><input type="number" class="form-control" id="edit-ram-limit" name="ram_limit" placeholder="Kosongkan untuk tanpa batas" min="64"></div><div class="mb-3"><label for="edit-cpu-cores" class="form-label">CPU Cores</label><input type="number" class="form-control" id="edit-cpu-cores" name="cpu_cores" placeholder="Kosongkan untuk tanpa batas" min="1"></div><button type="submit" class="btn btn-primary">Save Changes</button></form>
+                    </div></div>
+                </div>
             </div>
         </div>
-    </div></main>
-    <!-- ... (Modal, Toast, Context Menu tidak berubah) ... -->
-    <div class="modal fade" id="createContainerModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><form id="create-container-form"><div class="modal-header"><h5 class="modal-title">Create New Container</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-3"><label for="name" class="form-label">Container Name</label><input type="text" class="form-control" id="name" name="name" required></div><div class="mb-3"><label for="template" class="form-label">Template</label><input type="text" class="form-control" id="template" name="template" value="ubuntu" readonly></div><div class="mb-3"><label for="ram_limit" class="form-label">RAM Limit (MB)</label><input type="number" class="form-control" id="ram_limit" name="ram_limit" placeholder="e.g., 512" min="64"></div><div class="mb-3"><label for="cpu_limit" class="form-label">CPU Cores</label><input type="number" class="form-control" id="cpu_limit" name="cpu_limit" placeholder="e.g., 1" min="1"></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button><button type="submit" class="btn btn-primary">Create</button></div></form></div></div></div>
+    </main>
+
+    <div class="modal fade" id="createContainerModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content"><form id="create-container-form"><div class="modal-header"><h5 class="modal-title">Create New Container</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-3"><label for="name" class="form-label">Container Name</label><input type="text" class="form-control" id="name" name="name" required></div><div class="mb-3"><label for="template" class="form-label">Template</label><input type="text" class="form-control" id="template" name="template" value="ubuntu" readonly></div><div class="mb-3"><label for="ram_limit" class="form-label">RAM Limit (MB)</label><input type="number" class="form-control" id="ram_limit" name="ram_limit" placeholder="e.g., 512" min="64"></div><div class="mb-3"><label for="cpu_limit" class="form-label">CPU Cores</label><input type="number" class="form-control" id="cpu_limit" name="cpu_limit" placeholder="e.g., 1" min="1"></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button><button type="submit" class="btn btn-primary">Create</button></div></form></div></div></div>
     <div class="toast-container position-fixed bottom-0 end-0 p-3"></div>
     <div id="context-menu" class="context-menu"><a href="#" class="context-menu-item" id="context-start"><i class="bi bi-play-fill"></i> Start</a><a href="#" class="context-menu-item" id="context-stop"><i class="bi bi-stop-fill"></i> Stop</a><a href="#" class="context-menu-item" id="context-destroy"><i class="bi bi-trash-fill"></i> Destroy</a></div>
 
-    <!-- JS Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 
-    <!-- App Logic -->
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const App = {
-                // ... (elements & state tidak berubah) ...
                 elements: { sidebarList: document.getElementById('sidebar-list'), mainHeaderTitle: document.getElementById('main-header-title'), views: document.querySelectorAll('.view'), contentMenu: document.getElementById('content-menu'), createForm: document.getElementById('create-container-form'), createModal: new bootstrap.Modal(document.getElementById('createContainerModal')), toastContainer: document.querySelector('.toast-container'), contextMenu: document.getElementById('context-menu'), editForm: document.getElementById('edit-container-form'), },
                 state: { activeContainer: null, activeView: 'server-view', charts: {}, websockets: {}, terminal: null, containers: [], },
                 init() { this.bindEvents(); this.loadContainers(); this.handleHashChange(); this.connectGlobalWebSocket(); },
-                bindEvents() { window.addEventListener('hashchange', this.handleHashChange.bind(this)); this.elements.sidebarList.addEventListener('click', this.handleSidebarClick.bind(this)); this.elements.sidebarList.addEventListener('contextmenu', this.handleSidebarRightClick.bind(this)); this.elements.contentMenu.addEventListener('click', this.handleContentMenuClick.bind(this)); this.elements.createForm.addEventListener('submit', this.handleCreateFormSubmit.bind(this)); this.elements.editForm.addEventListener('submit', this.handleEditFormSubmit.bind(this)); document.addEventListener('click', () => this.elements.contextMenu.style.display = 'none'); },
-                showToast(message, status = 'info') { const toastEl = document.createElement('div'); const bgClass = status === 'error' ? 'bg-danger text-white' : (status === 'info' ? 'bg-info text-dark' : 'bg-success text-white'); toastEl.className = `toast align-items-center ${bgClass} border-0`; toastEl.setAttribute('role', 'alert'); toastEl.innerHTML = `<div class="d-flex"><div class="toast-body">${message}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`; this.elements.toastContainer.appendChild(toastEl); const toast = new bootstrap.Toast(toastEl, { delay: 5000 }); toast.show(); toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove()); },
-                formatBytes(bytes) { if (bytes === 0) return '0 Bytes'; const k = 1024; const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']; const i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]; },
-                createChart(canvasId, label, yCallback) { if (this.state.charts[canvasId]) this.state.charts[canvasId].destroy(); const ctx = document.getElementById(canvasId).getContext('2d'); const options = { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { color: '#bdc3c7' } }, x: { display: false } }, plugins: { legend: { display: false } } }; if (yCallback) options.scales.y.ticks.callback = yCallback; if(label.includes('CPU')) options.scales.y.max = 100; this.state.charts[canvasId] = new Chart(ctx, { type: 'line', data: { labels: [], datasets: [{ label: label, data: [], borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.2)', fill: true, tension: 0.4, pointRadius: 0 }] }, options }); },
-                addDataToChart(chartId, data) { const chart = this.state.charts[chartId]; if (!chart) return; chart.data.labels.push(new Date().toLocaleTimeString()); chart.data.datasets[0].data.push(data); if (chart.data.labels.length > 20) { chart.data.labels.shift(); chart.data.datasets[0].data.shift(); } chart.update('quiet'); },
-                cleanupConnections() { Object.values(this.state.websockets).forEach(ws => ws.close()); this.state.websockets = {}; if (this.state.terminal) { this.state.terminal.dispose(); this.state.terminal = null; } },
-                handleSidebarClick(e) { const targetLi = e.target.closest('li'); if (!targetLi) return; const viewId = targetLi.dataset.viewId; const containerName = targetLi.dataset.containerName; if (viewId === 'server-view') { window.location.hash = '/server/summary'; } else if (containerName) { window.location.hash = `/container/${containerName}/summary`; } },
-                handleContentMenuClick(e) { if (e.target.tagName === 'A' && this.state.activeContainer) { e.preventDefault(); window.location.hash = `/container/${this.state.activeContainer}/${e.target.hash.slice(1)}`; } },
-                async handleCreateFormSubmit(e) { e.preventDefault(); const formData = new FormData(this.elements.createForm); try { const response = await fetch('/api/containers', { method: 'POST', body: formData }); if (response.ok) { this.showToast('Creation task has been queued.', 'info'); this.elements.createModal.hide(); this.elements.createForm.reset(); } else { const error = await response.json(); this.showToast(`Error: ${error.message}`, 'error'); } } catch (error) { this.showToast('Failed to submit creation task.', 'error'); } },
-                handleSidebarRightClick(e) { const targetLi = e.target.closest('li.container-item'); if (!targetLi) return; e.preventDefault(); const containerName = targetLi.dataset.containerName; const containerState = this.state.containers.find(c => c.name === containerName)?.state; const menu = this.elements.contextMenu; menu.style.display = 'block'; menu.style.left = `${e.pageX}px`; menu.style.top = `${e.pageY}px`; const startBtn = document.getElementById('context-start'); const stopBtn = document.getElementById('context-stop'); const destroyBtn = document.getElementById('context-destroy'); startBtn.style.display = containerState === 'STOPPED' ? 'block' : 'none'; stopBtn.style.display = containerState === 'RUNNING' ? 'block' : 'none'; destroyBtn.style.display = containerState === 'STOPPED' ? 'block' : 'none'; startBtn.onclick = () => this.triggerContainerAction(containerName, 'start'); stopBtn.onclick = () => this.triggerContainerAction(containerName, 'stop'); destroyBtn.onclick = () => { if (confirm(`Anda yakin ingin menghapus permanen container "${containerName}"?`)) { this.triggerContainerAction(containerName, 'destroy'); } }; },
-                async triggerContainerAction(name, action) { try { await fetch(`/api/containers/${name}/${action}`, { method: 'POST' }); } catch (error) { this.showToast(`Gagal memicu aksi '${action}' pada ${name}.`, 'error'); } },
-                async loadContainers() { try { const response = await fetch('/api/containers'); this.state.containers = await response.json(); this.elements.sidebarList.querySelectorAll('.container-item').forEach(el => el.remove()); this.state.containers.forEach(c => { const iconClass = c.state === 'RUNNING' ? 'bi-play-circle-fill state-running' : 'bi-stop-circle-fill state-stopped'; const li = document.createElement('li'); li.dataset.containerName = c.name; li.className = 'container-item'; li.innerHTML = `<i class="bi ${iconClass} state-icon"></i> ${c.name}`; this.elements.sidebarList.appendChild(li); }); } catch (error) { console.error("Failed to load containers:", error); } },
-                switchView(viewId, title) { this.state.activeView = viewId; this.elements.mainHeaderTitle.textContent = title; this.elements.views.forEach(v => v.classList.toggle('active', v.id === viewId)); document.querySelectorAll('#sidebar-list li').forEach(li => { li.classList.toggle('active', li.dataset.viewId === viewId || li.dataset.containerName === this.state.activeContainer); }); },
-                renderHostView() { this.cleanupConnections(); this.state.activeContainer = null; this.switchView('server-view', 'Datacenter'); this.createChart('hostCpuChart', 'CPU Usage (%)'); this.createChart('hostRamChart', 'Memory Usage (%)'); },
-                async handleEditFormSubmit(e) { e.preventDefault(); if (!this.state.activeContainer) return; const formData = new FormData(this.elements.editForm); try { const response = await fetch(`/api/containers/${this.state.activeContainer}/config`, { method: 'POST', body: formData }); if (response.ok) { this.showToast('Update task has been queued.', 'success'); } else { const error = await response.json(); this.showToast(`Error: ${error.message}`, 'error'); } } catch (error) { this.showToast('Failed to submit update task.', 'error'); } },
-                async renderOptionsView(containerName) { document.getElementById('summary-view-content').style.display = 'none'; document.getElementById('console-view-content').style.display = 'none'; const optionsView = document.getElementById('options-view-content'); optionsView.style.display = 'block'; try { const response = await fetch(`/api/containers/${containerName}/config`); if(response.ok) { const config = await response.json(); document.getElementById('edit-ram-limit').value = config.ram_limit || ''; document.getElementById('edit-cpu-cores').value = config.cpu_cores || ''; } else { this.showToast('Failed to load container configuration.', 'error'); } } catch (error) { this.showToast('Error fetching container configuration.', 'error'); } },
+                bindEvents() { /* ... unchanged ... */ window.addEventListener('hashchange', this.handleHashChange.bind(this)); this.elements.sidebarList.addEventListener('click', this.handleSidebarClick.bind(this)); this.elements.sidebarList.addEventListener('contextmenu', this.handleSidebarRightClick.bind(this)); this.elements.contentMenu.addEventListener('click', this.handleContentMenuClick.bind(this)); this.elements.createForm.addEventListener('submit', this.handleCreateFormSubmit.bind(this)); this.elements.editForm.addEventListener('submit', this.handleEditFormSubmit.bind(this)); document.addEventListener('click', () => this.elements.contextMenu.style.display = 'none'); },
+                showToast(message, status = 'info') { /* ... unchanged ... */ const toastEl = document.createElement('div'); const bgClass = status === 'error' ? 'bg-danger text-white' : (status === 'info' ? 'bg-info text-dark' : 'bg-success text-white'); toastEl.className = `toast align-items-center ${bgClass} border-0`; toastEl.setAttribute('role', 'alert'); toastEl.innerHTML = `<div class="d-flex"><div class="toast-body">${message}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`; this.elements.toastContainer.appendChild(toastEl); const toast = new bootstrap.Toast(toastEl, { delay: 5000 }); toast.show(); toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove()); },
+                formatBytes(bytes) { /* ... unchanged ... */ if (bytes === 0) return '0 Bytes'; const k = 1024; const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']; const i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]; },
 
-                renderContainerView(containerName, subView = 'summary') {
+                // --- UPDATED to create charts with gradient fills ---
+                createChart(canvasId, label, color) {
+                    if (this.state.charts[canvasId]) this.state.charts[canvasId].destroy();
+                    const ctx = document.getElementById(canvasId).getContext('2d');
+
+                    const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+                    gradient.addColorStop(0, `${color}80`); // Start with some opacity
+                    gradient.addColorStop(1, `${color}00`); // End with full transparency
+
+                    const options = { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, grid: { color: 'rgba(255, 255, 255, 0.1)' }, ticks: { color: 'var(--text-secondary)' } }, x: { display: false, grid: { display: false } } }, plugins: { legend: { display: false } } };
+                    if(label.includes('CPU')) options.scales.y.max = 100;
+
+                    this.state.charts[canvasId] = new Chart(ctx, { type: 'line', data: { labels: [], datasets: [{ label: label, data: [], borderColor: color, backgroundColor: gradient, fill: true, tension: 0.4, pointRadius: 0 }] }, options });
+                },
+
+                addDataToChart(chartId, data) { /* ... unchanged ... */ const chart = this.state.charts[chartId]; if (!chart) return; chart.data.labels.push(new Date().toLocaleTimeString()); chart.data.datasets[0].data.push(data); if (chart.data.labels.length > 20) { chart.data.labels.shift(); chart.data.datasets[0].data.shift(); } chart.update('quiet'); },
+                cleanupConnections() { /* ... unchanged ... */ Object.values(this.state.websockets).forEach(ws => ws.close()); this.state.websockets = {}; if (this.state.terminal) { this.state.terminal.dispose(); this.state.terminal = null; } },
+                handleSidebarClick(e) { /* ... unchanged ... */ const targetLi = e.target.closest('li'); if (!targetLi) return; const viewId = targetLi.dataset.viewId; const containerName = targetLi.dataset.containerName; if (viewId === 'server-view') { window.location.hash = '/server/summary'; } else if (containerName) { window.location.hash = `/container/${containerName}/summary`; } },
+                handleContentMenuClick(e) { /* ... unchanged ... */ if (e.target.tagName === 'A' && this.state.activeContainer) { e.preventDefault(); window.location.hash = `/container/${this.state.activeContainer}/${e.target.hash.slice(1)}`; } },
+                async handleCreateFormSubmit(e) { /* ... unchanged ... */ e.preventDefault(); const formData = new FormData(this.elements.createForm); try { const response = await fetch('/api/containers', { method: 'POST', body: formData }); if (response.ok) { this.showToast('Creation task has been queued.', 'info'); this.elements.createModal.hide(); this.elements.createForm.reset(); } else { const error = await response.json(); this.showToast(`Error: ${error.message}`, 'error'); } } catch (error) { this.showToast('Failed to submit creation task.', 'error'); } },
+                handleSidebarRightClick(e) { /* ... unchanged ... */ const targetLi = e.target.closest('li.container-item'); if (!targetLi) return; e.preventDefault(); const containerName = targetLi.dataset.containerName; const containerState = this.state.containers.find(c => c.name === containerName)?.state; const menu = this.elements.contextMenu; menu.style.display = 'block'; menu.style.left = `${e.pageX}px`; menu.style.top = `${e.pageY}px`; const startBtn = document.getElementById('context-start'); const stopBtn = document.getElementById('context-stop'); const destroyBtn = document.getElementById('context-destroy'); startBtn.style.display = containerState === 'STOPPED' ? 'block' : 'none'; stopBtn.style.display = containerState === 'RUNNING' ? 'block' : 'none'; destroyBtn.style.display = containerState === 'STOPPED' ? 'block' : 'none'; startBtn.onclick = () => this.triggerContainerAction(containerName, 'start'); stopBtn.onclick = () => this.triggerContainerAction(containerName, 'stop'); destroyBtn.onclick = () => { if (confirm(`Anda yakin ingin menghapus permanen container "${containerName}"?`)) { this.triggerContainerAction(containerName, 'destroy'); } }; },
+                async triggerContainerAction(name, action) { /* ... unchanged ... */ try { await fetch(`/api/containers/${name}/${action}`, { method: 'POST' }); } catch (error) { this.showToast(`Gagal memicu aksi '${action}' pada ${name}.`, 'error'); } },
+                async loadContainers() { /* ... unchanged ... */ try { const response = await fetch('/api/containers'); this.state.containers = await response.json(); this.elements.sidebarList.querySelectorAll('.container-item').forEach(el => el.remove()); this.state.containers.forEach(c => { const iconClass = c.state === 'RUNNING' ? 'bi-play-circle-fill state-running' : 'bi-stop-circle-fill state-stopped'; const li = document.createElement('li'); li.dataset.containerName = c.name; li.className = 'container-item'; li.innerHTML = `<i class="bi ${iconClass} state-icon"></i> ${c.name}`; this.elements.sidebarList.appendChild(li); }); } catch (error) { console.error("Failed to load containers:", error); } },
+                switchView(viewId, title) { /* ... unchanged ... */ this.state.activeView = viewId; this.elements.mainHeaderTitle.textContent = title; this.elements.views.forEach(v => v.classList.toggle('active', v.id === viewId)); document.querySelectorAll('#sidebar-list li').forEach(li => { li.classList.toggle('active', li.dataset.viewId === viewId || li.dataset.containerName === this.state.activeContainer); }); },
+
+                renderHostView() {
+                    this.cleanupConnections();
+                    this.state.activeContainer = null;
+                    this.switchView('server-view', 'Datacenter');
+                    // Create charts with new colors
+                    this.createChart('hostCpuChart', 'CPU Usage (%)', '#0d6efd');
+                    this.createChart('hostRamChart', 'Memory Usage (%)', '#198754');
+                },
+
+                async handleEditFormSubmit(e) { /* ... unchanged ... */ e.preventDefault(); if (!this.state.activeContainer) return; const formData = new FormData(this.elements.editForm); try { const response = await fetch(`/api/containers/${this.state.activeContainer}/config`, { method: 'POST', body: formData }); if (response.ok) { this.showToast('Update task has been queued.', 'success'); } else { const error = await response.json(); this.showToast(`Error: ${error.message}`, 'error'); } } catch (error) { this.showToast('Failed to submit update task.', 'error'); } },
+                async renderOptionsView(containerName) { /* ... unchanged ... */ document.getElementById('summary-view-content').style.display = 'none'; document.getElementById('console-view-content').style.display = 'none'; const optionsView = document.getElementById('options-view-content'); optionsView.style.display = 'block'; try { const response = await fetch(`/api/containers/${containerName}/config`); if(response.ok) { const config = await response.json(); document.getElementById('edit-ram-limit').value = config.ram_limit || ''; document.getElementById('edit-cpu-cores').value = config.cpu_cores || ''; } else { this.showToast('Failed to load container configuration.', 'error'); } } catch (error) { this.showToast('Error fetching container configuration.', 'error'); } },
+                renderContainerView(containerName, subView = 'summary') { /* ... A slight logic change to update status ... */
                     this.cleanupConnections();
                     this.state.activeContainer = containerName;
                     this.switchView('container-view', `Container: ${containerName}`);
@@ -140,27 +360,21 @@
                         const summaryView = document.getElementById('summary-view-content');
                         summaryView.style.display = 'block';
                         
-                        // Update status statis
                         const containerState = this.state.containers.find(c => c.name === containerName)?.state || 'Unknown';
-                        document.getElementById('ct-summary-status').textContent = containerState;
+                        const statusEl = document.getElementById('ct-summary-status');
+                        statusEl.textContent = containerState;
+                        statusEl.className = `value fw-bold ${containerState === 'RUNNING' ? 'text-success' : 'text-danger'}`;
 
-                        // Buka WebSocket untuk data real-time
                         const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/container/${containerName}/stats`);
                         this.state.websockets.containerStats = ws;
                         ws.onmessage = (event) => {
                             const data = JSON.parse(event.data);
-                            
-                            // Update CPU
                             document.getElementById('ct-summary-cpu-text').textContent = `${data.cpu.toFixed(2)}%`;
                             document.getElementById('ct-summary-cpu-progress').style.width = `${data.cpu}%`;
-
-                            // Update RAM
                             const ramPercent = data.ram_limit > 0 ? (data.ram / data.ram_limit) * 100 : 0;
                             document.getElementById('ct-summary-ram-text').textContent = `${ramPercent.toFixed(2)}%`;
                             document.getElementById('ct-summary-ram-progress').style.width = `${ramPercent}%`;
                             document.getElementById('ct-summary-ram-details').textContent = `${this.formatBytes(data.ram)} / ${this.formatBytes(data.ram_limit)}`;
-                            
-                            // Update Disk
                             const diskPercent = data.disk_total > 0 ? (data.disk_usage / data.disk_total) * 100 : 0;
                             document.getElementById('ct-summary-disk-text').textContent = `${diskPercent.toFixed(2)}%`;
                             document.getElementById('ct-summary-disk-progress').style.width = `${diskPercent}%`;
@@ -175,17 +389,16 @@
                         const fitAddon = new FitAddon.FitAddon(); this.state.terminal.loadAddon(fitAddon); this.state.terminal.open(consoleContainer); fitAddon.fit();
                         const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/console/${containerName}`);
                         ws.binaryType = 'arraybuffer'; this.state.websockets.console = ws;
-                        ws.onopen = () => this.state.terminal.writeln('--- Connected ---');
+                        ws.onopen = () => this.state.terminal.writeln('\x1B[1;3;32m--- Connected to container ---\x1B[0m');
                         ws.onmessage = (event) => { this.state.terminal.write(new Uint8Array(event.data)); };
-                        ws.onclose = () => this.state.terminal.writeln('\r\n--- Disconnected ---');
+                        ws.onclose = () => this.state.terminal.writeln('\r\n\x1B[1;3;31m--- Disconnected ---\x1B[0m');
                         this.state.terminal.onData(data => { if (ws.readyState === WebSocket.OPEN) { const encoder = new TextEncoder(); ws.send(encoder.encode(data)); } });
                     } else if (subView === 'options') {
                         this.renderOptionsView(containerName);
                     }
                 },
-
-                handleHashChange() { const hash = window.location.hash.slice(1); const parts = hash.split('/').filter(p => p); if (parts.length >= 2 && parts[0] === 'server') { this.renderHostView(); } else if (parts.length >= 2 && parts[0] === 'container') { this.renderContainerView(parts[1], parts[2] || 'summary'); } else { window.location.hash = '/server/summary'; } },
-                connectGlobalWebSocket() {
+                handleHashChange() { /* ... unchanged ... */ const hash = window.location.hash.slice(1); const parts = hash.split('/').filter(p => p); if (parts.length >= 2 && parts[0] === 'server') { this.renderHostView(); } else if (parts.length >= 2 && parts[0] === 'container') { this.renderContainerView(parts[1], parts[2] || 'summary'); } else { window.location.hash = '/server/summary'; } },
+                connectGlobalWebSocket() { /* ... unchanged ... */
                     const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/events`);
                     ws.onmessage = (event) => {
                         const message = JSON.parse(event.data);
@@ -205,7 +418,6 @@
                     ws.onclose = () => setTimeout(() => this.connectGlobalWebSocket(), 5000);
                 }
             };
-
             App.init();
         });
     </script>
