@@ -106,18 +106,30 @@ def get_container_stats_task(name: str):
     try:
         c = lxc.Container(name)
         if not c.running:
-            return {"cpu_ns": 0, "ram_usage": 0, "ram_limit": 0}
+            return {"cpu_ns": 0, "ram_usage": 0, "ram_limit": 0, "disk_usage": 0, "disk_total": 0}
         
         cpu_usage_ns = int(c.get_cgroup_item("cpu.stat").splitlines()[1].split()[1])
         ram_usage_bytes = int(c.get_cgroup_item("memory.current"))
         ram_limit_bytes_str = c.get_cgroup_item("memory.max")
         ram_limit_bytes = int(ram_limit_bytes_str) if ram_limit_bytes_str.isdigit() else 0
-        return {"cpu_ns": cpu_usage_ns, "ram_usage": ram_usage_bytes, "ram_limit": ram_limit_bytes}
+        
+        disk = psutil.disk_usage('/')
+        disk_usage = disk.used
+        disk_total = disk.total
+
+        return {
+            "cpu_ns": cpu_usage_ns,
+            "ram_usage": ram_usage_bytes,
+            "ram_limit": ram_limit_bytes,
+            "disk_usage": disk_usage,
+            "disk_total": disk_total
+        }
     except (FileNotFoundError, IndexError):
-        return {"cpu_ns": 0, "ram_usage": 0, "ram_limit": 0}
+        return {"cpu_ns": 0, "ram_usage": 0, "ram_limit": 0, "disk_usage": 0, "disk_total": 0}
     except Exception as e:
         print(f"Error getting stats for {name}: {e}")
         return None
+
 
 @celery_app.task
 def console_session_task(session_id, container_name):

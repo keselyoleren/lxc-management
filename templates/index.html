@@ -36,26 +36,67 @@
         .state-stopped { color: #e74c3c; }
         .toast-container { z-index: 1090; }
         .stat-card { margin-bottom: 1.5rem; }
-        /* Gaya untuk Context Menu */
         .context-menu { position: absolute; z-index: 1000; display: none; background-color: #2c3e50; border: 1px solid #4a627a; border-radius: 0.25rem; padding: 0.5rem 0; min-width: 160px; box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15); }
         .context-menu-item { display: block; width: 100%; padding: 0.5rem 1rem; clear: both; font-weight: 400; color: #ecf0f1; text-align: inherit; white-space: nowrap; background-color: transparent; border: 0; cursor: pointer; }
         .context-menu-item:hover { background-color: #34495e; }
         .context-menu-item i { margin-right: 0.75rem; }
+        .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+        .summary-item { display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0; border-bottom: 1px solid #4a627a; }
+        .summary-item:last-child { border-bottom: none; }
+        .summary-item .label { display: flex; align-items: center; color: #bdc3c7; }
+        .summary-item .label i { font-size: 1.2rem; margin-right: 0.75rem; width: 20px; text-align: center; }
+        .summary-item .value { font-weight: bold; }
+        .resource-bar .progress { height: 1.5rem; background-color: #2c3e50; }
+        .resource-bar .progress-bar { font-size: 0.8rem; }
     </style>
 </head>
 <body>
     <!-- ... (Struktur HTML utama tidak berubah) ... -->
     <aside class="sidebar"><div class="sidebar-header">Server View</div><ul class="sidebar-list" id="sidebar-list"><li id="datacenter-link" data-view-id="server-view"><i class="bi bi-database-fill state-icon"></i> Datacenter</li></ul></aside>
-    <main class="main-content"><header class="main-header"><h4 id="main-header-title">Datacenter</h4><div><button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createContainerModal"><i class="bi bi-plus-circle"></i> Create CT</button></div></header><div class="main-view"><div id="server-view" class="view"><div class="row"><div class="col-lg-4"><div class="card stat-card"><div class="card-body"><h5 class="card-title">CPU Usage</h5><p class="card-text fs-2 fw-bold" id="host-cpu-text">0.0%</p><div class="progress" style="height: 10px;"><div id="host-cpu-progress" class="progress-bar" role="progressbar"></div></div></div></div></div><div class="col-lg-4"><div class="card stat-card"><div class="card-body"><h5 class="card-title">RAM Usage</h5><p class="card-text fs-2 fw-bold" id="host-ram-text">0%</p><small class="text-muted" id="host-ram-details">0 GB / 0 GB</small><div class="progress mt-2" style="height: 10px;"><div id="host-ram-progress" class="progress-bar bg-success" role="progressbar"></div></div></div></div></div><div class="col-lg-4"><div class="card stat-card"><div class="card-body"><h5 class="card-title">Disk Usage</h5><p class="card-text fs-2 fw-bold" id="host-disk-text">0%</p><small class="text-muted" id="host-disk-details">0 GB / 0 GB</small><div class="progress mt-2" style="height: 10px;"><div id="host-disk-progress" class="progress-bar bg-warning" role="progressbar"></div></div></div></div></div></div><div class="row"><div class="col-lg-6"><div class="card"><div class="card-body"><h5>CPU Usage History</h5><div class="chart-container"><canvas id="hostCpuChart"></canvas></div></div></div></div><div class="col-lg-6"><div class="card"><div class="card-body"><h5>Memory Usage History</h5><div class="chart-container"><canvas id="hostRamChart"></canvas></div></div></div></div></div></div><div id="container-view" class="view"><ul class="content-menu" id="content-menu"><li><a href="#summary" class="active">Summary</a></li><li><a href="#console">Console</a></li></ul><div id="summary-view-content" class="content-panel active"><div class="row"><div class="col-md-6 mb-4"><h5>CPU Usage</h5><div class="chart-container"><canvas id="containerCpuChart"></canvas></div></div><div class="col-md-6 mb-4"><h5>Memory Usage</h5><div class="chart-container"><canvas id="containerRamChart"></canvas></div></div></div></div><div id="console-view-content" class="content-panel" style="display: none;"></div></div></div></main>
+    <main class="main-content"><header class="main-header"><h4 id="main-header-title">Datacenter</h4><div><button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createContainerModal"><i class="bi bi-plus-circle"></i> Create CT</button></div></header><div class="main-view"><div id="server-view" class="view"><div class="row"><div class="col-lg-4"><div class="card stat-card"><div class="card-body"><h5 class="card-title">CPU Usage</h5><p class="card-text fs-2 fw-bold" id="host-cpu-text">0.0%</p><div class="progress" style="height: 10px;"><div id="host-cpu-progress" class="progress-bar" role="progressbar"></div></div></div></div></div><div class="col-lg-4"><div class="card stat-card"><div class="card-body"><h5 class="card-title">RAM Usage</h5><p class="card-text fs-2 fw-bold" id="host-ram-text">0%</p><small class="text-muted" id="host-ram-details">0 GB / 0 GB</small><div class="progress mt-2" style="height: 10px;"><div id="host-ram-progress" class="progress-bar bg-success" role="progressbar"></div></div></div></div></div><div class="col-lg-4"><div class="card stat-card"><div class="card-body"><h5 class="card-title">Disk Usage</h5><p class="card-text fs-2 fw-bold" id="host-disk-text">0%</p><small class="text-muted" id="host-disk-details">0 GB / 0 GB</small><div class="progress mt-2" style="height: 10px;"><div id="host-disk-progress" class="progress-bar bg-warning" role="progressbar"></div></div></div></div></div></div><div class="row"><div class="col-lg-6"><div class="card"><div class="card-body"><h5>CPU Usage History</h5><div class="chart-container"><canvas id="hostCpuChart"></canvas></div></div></div></div><div class="col-lg-6"><div class="card"><div class="card-body"><h5>Memory Usage History</h5><div class="chart-container"><canvas id="hostRamChart"></canvas></div></div></div></div></div></div>
+        <div id="container-view" class="view">
+            <ul class="content-menu" id="content-menu">
+                <li><a href="#summary" class="active">Summary</a></li>
+                <li><a href="#console">Console</a></li>
+                <li><a href="#options">Options</a></li>
+            </ul>
+            <!-- Panel Konten Summary Baru -->
+            <div id="summary-view-content" class="content-panel active">
+                <div class="summary-grid">
+                    <div>
+                        <div class="summary-item"><span class="label"><i class="bi bi-info-circle"></i> Status</span><span id="ct-summary-status" class="value"></span></div>
+                        <div class="summary-item"><span class="label"><i class="bi bi-hdd-stack"></i> Node</span><span class="value">LXC Host</span></div>
+                        <div class="summary-item"><span class="label"><i class="bi bi-ubuntu"></i> OS Type</span><span class="value">Ubuntu</span></div>
+                    </div>
+                    <div class="resource-bars">
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between"><span class="label"><i class="bi bi-cpu"></i> CPU usage</span><span id="ct-summary-cpu-text" class="value">0.00%</span></div>
+                            <div class="progress"><div id="ct-summary-cpu-progress" class="progress-bar" role="progressbar"></div></div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between"><span class="label"><i class="bi bi-memory"></i> Memory usage</span><span id="ct-summary-ram-text" class="value">0%</span></div>
+                            <div class="progress"><div id="ct-summary-ram-progress" class="progress-bar bg-success" role="progressbar"></div></div>
+                            <div class="text-end text-muted"><small id="ct-summary-ram-details">0 B / 0 B</small></div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between"><span class="label"><i class="bi bi-device-hdd"></i> Bootdisk size</span><span id="ct-summary-disk-text" class="value">0%</span></div>
+                            <div class="progress"><div id="ct-summary-disk-progress" class="progress-bar bg-warning" role="progressbar"></div></div>
+                            <div class="text-end text-muted"><small id="ct-summary-disk-details">0 B / 0 B</small></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div id="console-view-content" class="content-panel" style="display: none;"></div>
+            <div id="options-view-content" class="content-panel" style="display: none;">
+                <h5>Resource Limits</h5>
+                <form id="edit-container-form" class="col-md-6"><div class="mb-3"><label for="edit-ram-limit" class="form-label">RAM Limit (MB)</label><input type="number" class="form-control" id="edit-ram-limit" name="ram_limit" placeholder="Kosongkan untuk tanpa batas" min="64"></div><div class="mb-3"><label for="edit-cpu-cores" class="form-label">CPU Cores</label><input type="number" class="form-control" id="edit-cpu-cores" name="cpu_cores" placeholder="Kosongkan untuk tanpa batas" min="1"></div><button type="submit" class="btn btn-primary">Save Changes</button></form>
+            </div>
+        </div>
+    </div></main>
+    <!-- ... (Modal, Toast, Context Menu tidak berubah) ... -->
     <div class="modal fade" id="createContainerModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><form id="create-container-form"><div class="modal-header"><h5 class="modal-title">Create New Container</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><div class="mb-3"><label for="name" class="form-label">Container Name</label><input type="text" class="form-control" id="name" name="name" required></div><div class="mb-3"><label for="template" class="form-label">Template</label><input type="text" class="form-control" id="template" name="template" value="ubuntu" readonly></div><div class="mb-3"><label for="ram_limit" class="form-label">RAM Limit (MB)</label><input type="number" class="form-control" id="ram_limit" name="ram_limit" placeholder="e.g., 512" min="64"></div><div class="mb-3"><label for="cpu_limit" class="form-label">CPU Cores</label><input type="number" class="form-control" id="cpu_limit" name="cpu_limit" placeholder="e.g., 1" min="1"></div></div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button><button type="submit" class="btn btn-primary">Create</button></div></form></div></div></div>
     <div class="toast-container position-fixed bottom-0 end-0 p-3"></div>
-    
-    <!-- Context Menu HTML -->
-    <div id="context-menu" class="context-menu">
-        <a href="#" class="context-menu-item" id="context-start"><i class="bi bi-play-fill"></i> Start</a>
-        <a href="#" class="context-menu-item" id="context-stop"><i class="bi bi-stop-fill"></i> Stop</a>
-        <a href="#" class="context-menu-item" id="context-destroy"><i class="bi bi-trash-fill"></i> Destroy</a>
-    </div>
+    <div id="context-menu" class="context-menu"><a href="#" class="context-menu-item" id="context-start"><i class="bi bi-play-fill"></i> Start</a><a href="#" class="context-menu-item" id="context-stop"><i class="bi bi-stop-fill"></i> Stop</a><a href="#" class="context-menu-item" id="context-destroy"><i class="bi bi-trash-fill"></i> Destroy</a></div>
 
     <!-- JS Libraries -->
     <script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js"></script>
@@ -66,41 +107,11 @@
     <script>
         document.addEventListener('DOMContentLoaded', function () {
             const App = {
-                elements: {
-                    sidebarList: document.getElementById('sidebar-list'),
-                    mainHeaderTitle: document.getElementById('main-header-title'),
-                    views: document.querySelectorAll('.view'),
-                    contentMenu: document.getElementById('content-menu'),
-                    createForm: document.getElementById('create-container-form'),
-                    createModal: new bootstrap.Modal(document.getElementById('createContainerModal')),
-                    toastContainer: document.querySelector('.toast-container'),
-                    contextMenu: document.getElementById('context-menu'),
-                },
-                state: {
-                    activeContainer: null,
-                    activeView: 'server-view',
-                    charts: {},
-                    websockets: {},
-                    terminal: null,
-                    containers: [],
-                },
-
-                init() {
-                    this.bindEvents();
-                    this.loadContainers();
-                    this.handleHashChange();
-                    this.connectGlobalWebSocket();
-                },
-
-                bindEvents() {
-                    window.addEventListener('hashchange', this.handleHashChange.bind(this));
-                    this.elements.sidebarList.addEventListener('click', this.handleSidebarClick.bind(this));
-                    this.elements.sidebarList.addEventListener('contextmenu', this.handleSidebarRightClick.bind(this));
-                    this.elements.contentMenu.addEventListener('click', this.handleContentMenuClick.bind(this));
-                    this.elements.createForm.addEventListener('submit', this.handleCreateFormSubmit.bind(this));
-                    document.addEventListener('click', () => this.elements.contextMenu.style.display = 'none');
-                },
-                
+                // ... (elements & state tidak berubah) ...
+                elements: { sidebarList: document.getElementById('sidebar-list'), mainHeaderTitle: document.getElementById('main-header-title'), views: document.querySelectorAll('.view'), contentMenu: document.getElementById('content-menu'), createForm: document.getElementById('create-container-form'), createModal: new bootstrap.Modal(document.getElementById('createContainerModal')), toastContainer: document.querySelector('.toast-container'), contextMenu: document.getElementById('context-menu'), editForm: document.getElementById('edit-container-form'), },
+                state: { activeContainer: null, activeView: 'server-view', charts: {}, websockets: {}, terminal: null, containers: [], },
+                init() { this.bindEvents(); this.loadContainers(); this.handleHashChange(); this.connectGlobalWebSocket(); },
+                bindEvents() { window.addEventListener('hashchange', this.handleHashChange.bind(this)); this.elements.sidebarList.addEventListener('click', this.handleSidebarClick.bind(this)); this.elements.sidebarList.addEventListener('contextmenu', this.handleSidebarRightClick.bind(this)); this.elements.contentMenu.addEventListener('click', this.handleContentMenuClick.bind(this)); this.elements.createForm.addEventListener('submit', this.handleCreateFormSubmit.bind(this)); this.elements.editForm.addEventListener('submit', this.handleEditFormSubmit.bind(this)); document.addEventListener('click', () => this.elements.contextMenu.style.display = 'none'); },
                 showToast(message, status = 'info') { const toastEl = document.createElement('div'); const bgClass = status === 'error' ? 'bg-danger text-white' : (status === 'info' ? 'bg-info text-dark' : 'bg-success text-white'); toastEl.className = `toast align-items-center ${bgClass} border-0`; toastEl.setAttribute('role', 'alert'); toastEl.innerHTML = `<div class="d-flex"><div class="toast-body">${message}</div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div>`; this.elements.toastContainer.appendChild(toastEl); const toast = new bootstrap.Toast(toastEl, { delay: 5000 }); toast.show(); toastEl.addEventListener('hidden.bs.toast', () => toastEl.remove()); },
                 formatBytes(bytes) { if (bytes === 0) return '0 Bytes'; const k = 1024; const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']; const i = Math.floor(Math.log(bytes) / Math.log(k)); return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]; },
                 createChart(canvasId, label, yCallback) { if (this.state.charts[canvasId]) this.state.charts[canvasId].destroy(); const ctx = document.getElementById(canvasId).getContext('2d'); const options = { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, ticks: { color: '#bdc3c7' } }, x: { display: false } }, plugins: { legend: { display: false } } }; if (yCallback) options.scales.y.ticks.callback = yCallback; if(label.includes('CPU')) options.scales.y.max = 100; this.state.charts[canvasId] = new Chart(ctx, { type: 'line', data: { labels: [], datasets: [{ label: label, data: [], borderColor: '#3498db', backgroundColor: 'rgba(52, 152, 219, 0.2)', fill: true, tension: 0.4, pointRadius: 0 }] }, options }); },
@@ -114,7 +125,9 @@
                 async loadContainers() { try { const response = await fetch('/api/containers'); this.state.containers = await response.json(); this.elements.sidebarList.querySelectorAll('.container-item').forEach(el => el.remove()); this.state.containers.forEach(c => { const iconClass = c.state === 'RUNNING' ? 'bi-play-circle-fill state-running' : 'bi-stop-circle-fill state-stopped'; const li = document.createElement('li'); li.dataset.containerName = c.name; li.className = 'container-item'; li.innerHTML = `<i class="bi ${iconClass} state-icon"></i> ${c.name}`; this.elements.sidebarList.appendChild(li); }); } catch (error) { console.error("Failed to load containers:", error); } },
                 switchView(viewId, title) { this.state.activeView = viewId; this.elements.mainHeaderTitle.textContent = title; this.elements.views.forEach(v => v.classList.toggle('active', v.id === viewId)); document.querySelectorAll('#sidebar-list li').forEach(li => { li.classList.toggle('active', li.dataset.viewId === viewId || li.dataset.containerName === this.state.activeContainer); }); },
                 renderHostView() { this.cleanupConnections(); this.state.activeContainer = null; this.switchView('server-view', 'Datacenter'); this.createChart('hostCpuChart', 'CPU Usage (%)'); this.createChart('hostRamChart', 'Memory Usage (%)'); },
-                
+                async handleEditFormSubmit(e) { e.preventDefault(); if (!this.state.activeContainer) return; const formData = new FormData(this.elements.editForm); try { const response = await fetch(`/api/containers/${this.state.activeContainer}/config`, { method: 'POST', body: formData }); if (response.ok) { this.showToast('Update task has been queued.', 'success'); } else { const error = await response.json(); this.showToast(`Error: ${error.message}`, 'error'); } } catch (error) { this.showToast('Failed to submit update task.', 'error'); } },
+                async renderOptionsView(containerName) { document.getElementById('summary-view-content').style.display = 'none'; document.getElementById('console-view-content').style.display = 'none'; const optionsView = document.getElementById('options-view-content'); optionsView.style.display = 'block'; try { const response = await fetch(`/api/containers/${containerName}/config`); if(response.ok) { const config = await response.json(); document.getElementById('edit-ram-limit').value = config.ram_limit || ''; document.getElementById('edit-cpu-cores').value = config.cpu_cores || ''; } else { this.showToast('Failed to load container configuration.', 'error'); } } catch (error) { this.showToast('Error fetching container configuration.', 'error'); } },
+
                 renderContainerView(containerName, subView = 'summary') {
                     this.cleanupConnections();
                     this.state.activeContainer = containerName;
@@ -124,50 +137,54 @@
                     document.querySelectorAll('.content-panel').forEach(panel => panel.style.display = 'none');
 
                     if (subView === 'summary') {
-                        document.getElementById('summary-view-content').style.display = 'block';
-                        this.createChart('containerCpuChart', 'CPU Usage (%)');
-                        this.createChart('containerRamChart', 'Memory Usage', this.formatBytes);
+                        const summaryView = document.getElementById('summary-view-content');
+                        summaryView.style.display = 'block';
                         
+                        // Update status statis
+                        const containerState = this.state.containers.find(c => c.name === containerName)?.state || 'Unknown';
+                        document.getElementById('ct-summary-status').textContent = containerState;
+
+                        // Buka WebSocket untuk data real-time
                         const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/container/${containerName}/stats`);
                         this.state.websockets.containerStats = ws;
                         ws.onmessage = (event) => {
                             const data = JSON.parse(event.data);
-                            this.addDataToChart('containerCpuChart', data.cpu);
-                            this.addDataToChart('containerRamChart', data.ram);
+                            
+                            // Update CPU
+                            document.getElementById('ct-summary-cpu-text').textContent = `${data.cpu.toFixed(2)}%`;
+                            document.getElementById('ct-summary-cpu-progress').style.width = `${data.cpu}%`;
+
+                            // Update RAM
+                            const ramPercent = data.ram_limit > 0 ? (data.ram / data.ram_limit) * 100 : 0;
+                            document.getElementById('ct-summary-ram-text').textContent = `${ramPercent.toFixed(2)}%`;
+                            document.getElementById('ct-summary-ram-progress').style.width = `${ramPercent}%`;
+                            document.getElementById('ct-summary-ram-details').textContent = `${this.formatBytes(data.ram)} / ${this.formatBytes(data.ram_limit)}`;
+                            
+                            // Update Disk
+                            const diskPercent = data.disk_total > 0 ? (data.disk_usage / data.disk_total) * 100 : 0;
+                            document.getElementById('ct-summary-disk-text').textContent = `${diskPercent.toFixed(2)}%`;
+                            document.getElementById('ct-summary-disk-progress').style.width = `${diskPercent}%`;
+                            document.getElementById('ct-summary-disk-details').textContent = `${this.formatBytes(data.disk_usage)} / ${this.formatBytes(data.disk_total)}`;
                         };
+
                     } else if (subView === 'console') {
                         const consoleContainer = document.getElementById('console-view-content');
                         consoleContainer.style.display = 'block';
                         consoleContainer.innerHTML = '';
                         this.state.terminal = new Terminal({ cursorBlink: true, theme: { background: '#000', foreground: '#fff' } });
-                        const fitAddon = new FitAddon.FitAddon();
-                        this.state.terminal.loadAddon(fitAddon);
-                        this.state.terminal.open(consoleContainer);
-                        fitAddon.fit();
+                        const fitAddon = new FitAddon.FitAddon(); this.state.terminal.loadAddon(fitAddon); this.state.terminal.open(consoleContainer); fitAddon.fit();
                         const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/console/${containerName}`);
-                        ws.binaryType = 'arraybuffer'; // Sangat penting untuk data PTY
-                        this.state.websockets.console = ws;
-                        
+                        ws.binaryType = 'arraybuffer'; this.state.websockets.console = ws;
                         ws.onopen = () => this.state.terminal.writeln('--- Connected ---');
-                        ws.onmessage = (event) => {
-                            // event.data adalah ArrayBuffer, Xterm.js butuh Uint8Array
-                            this.state.terminal.write(new Uint8Array(event.data));
-                        };
+                        ws.onmessage = (event) => { this.state.terminal.write(new Uint8Array(event.data)); };
                         ws.onclose = () => this.state.terminal.writeln('\r\n--- Disconnected ---');
-                        
-                        // FIX: Kirim data sebagai biner, bukan teks
-                        this.state.terminal.onData(data => {
-                            if (ws.readyState === WebSocket.OPEN) {
-                                // Menggunakan TextEncoder untuk mengubah string menjadi Uint8Array (biner)
-                                const encoder = new TextEncoder();
-                                ws.send(encoder.encode(data));
-                            }
-                        });
+                        this.state.terminal.onData(data => { if (ws.readyState === WebSocket.OPEN) { const encoder = new TextEncoder(); ws.send(encoder.encode(data)); } });
+                    } else if (subView === 'options') {
+                        this.renderOptionsView(containerName);
                     }
                 },
 
                 handleHashChange() { const hash = window.location.hash.slice(1); const parts = hash.split('/').filter(p => p); if (parts.length >= 2 && parts[0] === 'server') { this.renderHostView(); } else if (parts.length >= 2 && parts[0] === 'container') { this.renderContainerView(parts[1], parts[2] || 'summary'); } else { window.location.hash = '/server/summary'; } },
-
                 connectGlobalWebSocket() {
                     const ws = new WebSocket(`${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws/events`);
                     ws.onmessage = (event) => {
