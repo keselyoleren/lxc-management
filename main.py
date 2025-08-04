@@ -84,72 +84,68 @@ async def ws_global_events(websocket: WebSocket):
 
 @app.websocket("/ws/container/{name}/stats")
 async def ws_container_stats(websocket: WebSocket, name: str):
-    await websocket.accept()
-    last_cpu_ns = 0
-    last_time = asyncio.get_event_loop().time()
+    await websocket.accept(); last_cpu_ns = 0; last_time = asyncio.get_event_loop().time()
     try:
         while True:
-            task = get_container_stats_task.delay(name)
-            stats = task.get(timeout=5)
-            
-            if stats:
-                current_time = asyncio.get_event_loop().time()
-                time_delta = current_time - last_time
-                
-                cpu_delta_ns = stats.get('cpu_ns', 0) - last_cpu_ns
-                cpu_percent = (cpu_delta_ns / 1_000_000_000) / time_delta * 100 if time_delta > 0 else 0
-                
-                last_cpu_ns = stats.get('cpu_ns', 0)
-                last_time = current_time
-                
-                await websocket.send_json({"cpu": min(max(cpu_percent, 0), 100), "ram": stats.get('ram_usage', 0), "ram_limit": stats.get('ram_limit', 0)})
-            else:
-                await websocket.send_json({"cpu": 0, "ram": 0, "ram_limit": 0})
+            stats = None
+            try:
+                task = get_container_stats_task.delay(name)
+                stats = task.get(timeout=5)
+            except Exception as e:
+                print(f"Celery task for stats failed for {name}: {e}")
+                await asyncio.sleep(2)
+                continue
 
+            if stats:
+                current_time = asyncio.get_event_loop().time(); time_delta = current_time - last_time
+                cpu_delta_ns = stats.get('cpu_ns', 0) - last_cpu_ns; cpu_percent = (cpu_delta_ns / 1_000_000_000) / time_delta * 100 if time_delta > 0 else 0
+                last_cpu_ns = stats.get('cpu_ns', 0); last_time = current_time
+                await websocket.send_json({"cpu": min(max(cpu_percent, 0), 100), "ram": stats.get('ram_usage', 0), "ram_limit": stats.get('ram_limit', 0), "disk_usage": stats.get('disk_usage', 0), "disk_total": stats.get('disk_total', 0)})
+            else: 
+                await websocket.send_json({"cpu": 0, "ram": 0, "ram_limit": 0, "disk_usage": 0, "disk_total": 0})
             await asyncio.sleep(2)
-    except WebSocketDisconnect:
+    except WebSocketDisconnect: 
         print(f"Stats client for {name} disconnected.")
-    except Exception as e:
-        print(f"Error in stats websocket for {name}: {e}")
+    except Exception as e: 
+        print(f"Unhandled error in stats websocket for {name}: {e}")
 
 @app.websocket("/ws/console/{container_name}")
 async def ws_console(websocket: WebSocket, container_name: str):
-    await websocket.accept()
-    session_id = str(uuid.uuid4())
-    input_ch, output_ch = f"console_in:{session_id}", f"console_out:{session_id}"
-    console_session_task.delay(session_id, container_name)
-    stop_event = asyncio.Event()
+    await websocket.accept(); session_id = str(uuid.uuid4()); input_ch, output_ch = f"console_in:{session_id}", f"console_out:{session_id}"
+    console_session_task.delay(session_id, container_name); stop_event = asyncio.Event()
     
-    async def forward_to_redis(ws: WebSocket):
-        raw_redis_publisher = redis.from_url(REDIS_URL)
+    async def forward_to_redis(ws: WebSocket, stop_event: asyncio.Event):
+        raw_publisher = redis.from_url(REDIS_URL)
         try:
             while not stop_event.is_set():
                 data = await ws.receive_bytes()
-                await raw_redis_publisher.publish(input_ch, data)
+                await raw_publisher.publish(input_ch, data)
         except WebSocketDisconnect: pass
-        finally:
+        finally: 
             stop_event.set()
-            await raw_redis_publisher.publish(input_ch, b'__TERMINATE__')
-            await raw_redis_publisher.close()
+            await raw_publisher.publish(input_ch, b'__TERMINATE__')
+            await raw_publisher.close()
 
-    async def listen_from_redis(ws: WebSocket):
-        raw_redis_client = redis.from_url(REDIS_URL)
-        pubsub = raw_redis_client.pubsub()
+    async def listen_from_redis(ws: WebSocket, stop_event: asyncio.Event):
+        raw_listener = redis.from_url(REDIS_URL)
+        pubsub = raw_listener.pubsub()
         await pubsub.subscribe(output_ch)
         try:
             while not stop_event.is_set():
                 msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if msg: await ws.send_bytes(msg['data'])
                 await asyncio.sleep(0.01)
-        finally:
+        finally: 
             await pubsub.unsubscribe(output_ch)
-            await raw_redis_client.close()
+            await raw_listener.close()
 
-    listener_task = asyncio.create_task(listen_from_redis(websocket))
-    forwarder_task = asyncio.create_task(forward_to_redis(websocket))
+    listener_task = asyncio.create_task(listen_from_redis(websocket, stop_event))
+    forwarder_task = asyncio.create_task(forward_to_redis(websocket, stop_event))
     
-    try: await asyncio.gather(listener_task, forwarder_task)
-    except Exception: pass
+    try: 
+        await asyncio.gather(listener_task, forwarder_task)
+    except Exception as e:
+        print(f"Console websocket gather error: {e}")
     finally:
         stop_event.set()
         print(f"Console session for {container_name} closed.")
