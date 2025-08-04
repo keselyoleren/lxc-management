@@ -333,7 +333,7 @@
                             body: formData
                         });
                         if (response.ok) {
-                            this.showToast('Creation task has been queued.', 'info');
+                            this.showToast('Creation vm has been created.', 'info');
                             this.elements.createModal.hide();
                             this.elements.createForm.reset();
                         } else {
@@ -354,10 +354,10 @@
                         const response = await fetch(`/api/containers/${name}/${action}`, { method: 'POST' });
                          if (!response.ok) {
                            const error = await response.json();
-                           this.showToast(`Gagal: ${error.message}`, 'error');
+                           this.showToast(`Failed: ${error.message}`, 'error');
                         }
                     } catch (error) {
-                        this.showToast(`Gagal memicu aksi '${action}' pada ${name}.`, 'error');
+                        this.showToast(`Failed to trigger '${action}' action on container "${name}".`, 'error');
                     }
                 },
                 async loadContainers() {
@@ -407,13 +407,13 @@
                             body: formData
                         });
                         if (response.ok) {
-                            this.showToast('Update task has been queued.', 'success');
+                            this.showToast('Update vm has been created.', 'success');
                         } else {
                             const error = await response.json();
                             this.showToast(`Error: ${error.message}`, 'error');
                         }
                     } catch (error) {
-                        this.showToast('Failed to submit update task.', 'error');
+                        this.showToast('Failed to submit update vm.', 'error');
                     }
                 },
                 async renderOptionsView(containerName) {
