@@ -84,9 +84,7 @@ async def ws_global_events(websocket: WebSocket):
 
 @app.websocket("/ws/container/{name}/stats")
 async def ws_container_stats(websocket: WebSocket, name: str):
-    await websocket.accept()
-    last_cpu_ns = 0
-    last_time = asyncio.get_event_loop().time()
+    await websocket.accept(); last_cpu_ns = 0; last_time = asyncio.get_event_loop().time()
     try:
         while True:
             stats = None
@@ -99,55 +97,32 @@ async def ws_container_stats(websocket: WebSocket, name: str):
                 continue
 
             if stats:
-                current_time = asyncio.get_event_loop().time()
-                time_delta = current_time - last_time
-                cpu_delta_ns = stats.get('cpu_ns', 0) - last_cpu_ns
-                cpu_percent = (cpu_delta_ns / 1_000_000_000) / time_delta * 100 if time_delta > 0 else 0
-                last_cpu_ns = stats.get('cpu_ns', 0)
-                last_time = current_time
-                await websocket.send_json({
-                    "cpu": min(max(cpu_percent, 0), 100),
-                    "ram": stats.get('ram_usage', 0),
-                    "ram_limit": stats.get('ram_limit', 0),
-                    "disk_usage": stats.get('disk_usage', 0),
-                    "disk_total": stats.get('disk_total', 0)
-                })
-            else:
-                await websocket.send_json({
-                    "cpu": 0,
-                    "ram": 0,
-                    "ram_limit": 0,
-                    "disk_usage": 0,
-                    "disk_total": 0
-                })
+                current_time = asyncio.get_event_loop().time(); time_delta = current_time - last_time
+                cpu_delta_ns = stats.get('cpu_ns', 0) - last_cpu_ns; cpu_percent = (cpu_delta_ns / 1_000_000_000) / time_delta * 100 if time_delta > 0 else 0
+                last_cpu_ns = stats.get('cpu_ns', 0); last_time = current_time
+                await websocket.send_json({"cpu": min(max(cpu_percent, 0), 100), "ram": stats.get('ram_usage', 0), "ram_limit": stats.get('ram_limit', 0), "disk_usage": stats.get('disk_usage', 0), "disk_total": stats.get('disk_total', 0)})
+            else: 
+                await websocket.send_json({"cpu": 0, "ram": 0, "ram_limit": 0, "disk_usage": 0, "disk_total": 0})
             await asyncio.sleep(2)
-    except WebSocketDisconnect:
+    except WebSocketDisconnect: 
         print(f"Stats client for {name} disconnected.")
-    except Exception as e:
+    except Exception as e: 
         print(f"Unhandled error in stats websocket for {name}: {e}")
-    finally:
-        # Handle cleanup if FE never accessed or disconnects
-        print(f"WebSocket for container stats {name} closed or never accessed.")
 
 @app.websocket("/ws/console/{container_name}")
 async def ws_console(websocket: WebSocket, container_name: str):
-    await websocket.accept()
-    session_id = str(uuid.uuid4())
-    input_ch, output_ch = f"console_in:{session_id}", f"console_out:{session_id}"
-    console_session_task.delay(session_id, container_name)
-    stop_event = asyncio.Event()
-
+    await websocket.accept(); session_id = str(uuid.uuid4()); input_ch, output_ch = f"console_in:{session_id}", f"console_out:{session_id}"
+    console_session_task.delay(session_id, container_name); stop_event = asyncio.Event()
+    
     async def forward_to_redis(ws: WebSocket, stop_event: asyncio.Event):
         raw_publisher = redis.from_url(REDIS_URL)
         try:
             while not stop_event.is_set():
-                try:
-                    data = await ws.receive_bytes()
-                    await raw_publisher.publish(input_ch, data)
-                except WebSocketDisconnect:
-                    stop_event.set()
-                    break
-        finally:
+                data = await ws.receive_bytes()
+                await raw_publisher.publish(input_ch, data)
+        except WebSocketDisconnect: pass
+        finally: 
+            stop_event.set()
             await raw_publisher.publish(input_ch, b'__TERMINATE__')
             await raw_publisher.close()
 
@@ -158,25 +133,18 @@ async def ws_console(websocket: WebSocket, container_name: str):
         try:
             while not stop_event.is_set():
                 msg = await pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
-                if msg:
-                    await ws.send_bytes(msg['data'])
+                if msg: await ws.send_bytes(msg['data'])
                 await asyncio.sleep(0.01)
-        except WebSocketDisconnect:
-            stop_event.set()
-        finally:
+        finally: 
             await pubsub.unsubscribe(output_ch)
             await raw_listener.close()
 
     listener_task = asyncio.create_task(listen_from_redis(websocket, stop_event))
     forwarder_task = asyncio.create_task(forward_to_redis(websocket, stop_event))
-
-    try:
+    
+    try: 
         await asyncio.gather(listener_task, forwarder_task)
-    except WebSocketDisconnect:
-        stop_event.set()
-        print(f"Console websocket for {container_name} disconnected by client.")
     except Exception as e:
-        stop_event.set()
         print(f"Console websocket gather error: {e}")
     finally:
         stop_event.set()
